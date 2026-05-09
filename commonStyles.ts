@@ -647,15 +647,23 @@ export const getDashboardStyles = (theme: Theme) =>
         },
         modalOverlay: {
             flex: 1,
-            justifyContent: 'flex-end',
             backgroundColor: 'rgba(0,0,0,0.45)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingTop: 50,
+            paddingBottom: 30,
         },
         modalSheet: {
             backgroundColor: theme.background,
-            borderTopLeftRadius: 32,
-            borderTopRightRadius: 32,
+            borderRadius: 24,
             overflow: 'hidden',
-            maxHeight: '80%',
+
+            width: '92%',
+            maxHeight: 700,
+            height: '72%',
+
+            marginTop: 50,
+            marginBottom: 30,
         },
         modalHeroImage: {
             width: '100%',
@@ -944,7 +952,7 @@ export const getTrailStyles = (theme: Theme) =>
             borderTopLeftRadius: 32,
             borderTopRightRadius: 32,
             overflow: 'hidden',
-            height: '90%',
+            height: '70%',
         },
         modalImage: {
             width: '100%',
@@ -1062,6 +1070,5 @@ export const getTrailStyles = (theme: Theme) =>
 // ─── Test user ────────────────────────────────────────────────────────────────
 
 export const testUser = {
-    name: 'Noah',
-    profilePicture: require('@/assets/images/shapes-1771356241673.jpg'),
+    profilePicture: `https://api.dicebear.com/7.x/bottts/svg?seed=test`
 };

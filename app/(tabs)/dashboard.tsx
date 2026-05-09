@@ -281,8 +281,15 @@ function AllLandmarksModal({ landmarks, milesWalked, onSelectLandmark, onClose, 
 }) {
     return (
         <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-            <View style={dStyles.modalOverlay}>
-                <View style={[dStyles.modalSheet, { maxHeight: '85%' }]}>
+            <View
+                style={[
+                    dStyles.modalOverlay,
+                    {
+                        justifyContent: 'center',
+                        paddingVertical: 40,
+                    },
+                ]}
+            >                <View style={[dStyles.modalSheet, { maxHeight: '85%' }]}>
                     <Pressable style={dStyles.closeButton} onPress={onClose}>
                         <Text style={dStyles.closeButtonText}>✕</Text>
                     </Pressable>
@@ -345,12 +352,23 @@ function LogMilesModal({ currentMiles, totalMiles, onLog, onClose, dStyles, them
         <Modal visible animationType="slide" transparent onRequestClose={onClose}>
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
                 <View style={dStyles.modalOverlay}>
-                    <View style={[dStyles.modalSheet, { paddingBottom: 40 }]}>
-                        <Pressable style={dStyles.closeButton} onPress={onClose} disabled={isSaving}>
+                    <View
+                        style={[
+                            dStyles.modalSheet,
+                            {
+                                width: '92%',
+                                alignSelf: 'center',
+                                maxHeight: '75%',
+                                paddingBottom: 40,
+                                marginTop: 50,
+                                marginBottom: 30,
+                            },
+                        ]}
+                    >                        <Pressable style={dStyles.closeButton} onPress={onClose} disabled={isSaving}>
                             <Text style={dStyles.closeButtonText}>✕</Text>
                         </Pressable>
                         <View style={dStyles.modalContent}>
-                            <Text style={dStyles.modalTitle}>Log Today&apos;s Miles</Text>
+                            <Text style={dStyles.modalTitle}>Log Today's Miles</Text>
                             <Text style={dStyles.modalMile}>
                                 {formatMiles(currentMiles)} / {formatMiles(totalMiles)} mi · {formatMiles(remaining)} mi remaining
                             </Text>
@@ -415,6 +433,7 @@ function TrailCompleteModal({
     mode: 'initial' | 'complete';
 }) {
     const DIFFICULTY_COLORS: Record<string, string> = {
+        'Easiest': '#4CAF50',
         'Easy': '#8BC34A', 'Easy-Moderate': '#CDDC39', 'Moderate': '#FFC107',
         'Moderate-Difficult': '#FF9800', 'Difficult': '#FF5722',
         'Very Difficult': '#E53935', 'Most Difficult': '#B71C1C',
@@ -423,8 +442,16 @@ function TrailCompleteModal({
     return (
         <Modal visible animationType="slide" transparent>
             <View style={dStyles.modalOverlay}>
-                <View style={[dStyles.modalSheet, { maxHeight: '88%' }]}>
-                    {/* Celebration header */}
+                <View
+                    style={[
+                        dStyles.modalSheet,
+                        {
+                            height: '80%',
+                            width: '92%',
+                            alignSelf: 'center',
+                        },
+                    ]}
+                >                    {/* Celebration header */}
                     <View style={dStyles.trailCompleteHeader}>
                         {mode === 'initial' ? (
                             <>
@@ -439,11 +466,15 @@ function TrailCompleteModal({
                                 <Text style={dStyles.trailCompleteEmoji}>🎉</Text>
                                 <Text style={dStyles.trailCompleteTitle}>Trail Complete!</Text>
                                 <Text style={dStyles.trailCompleteSubtitle}>
-                                    You have{' '}
+                                    You have
                                     <Text style={{ color: theme.accent, fontWeight: '700' }}>
-                                        {formatMiles(leftoverMiles)} miles
+                                        {' '}{formatMiles(leftoverMiles)} miles
                                     </Text>
-                                    {' '}to carry over.{'\n'}Pick your next trail below.
+                                    {' '}to carry over.
+                                </Text>
+
+                                <Text style={dStyles.trailCompleteSubtitle}>
+                                    Pick your next trail below.
                                 </Text>
                             </>
                         )}
@@ -451,28 +482,33 @@ function TrailCompleteModal({
 
                     <View style={dStyles.modalDivider} />
 
-                    <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-                        {trails.length === 0 ? (
-                            <Text style={[dStyles.trailCompleteSubtitle, { padding: 24, textAlign: 'center' }]}>
-                                You&apos;ve finished every trail we currently have.
-                            </Text>
-                        ) : (
-                            trails.map(trail => (
-                                <Pressable
-                                    key={trail.id}
-                                    style={({ pressed }) => [dStyles.trailSelectRow, pressed && { opacity: 0.8 }]}
-                                    onPress={() => onSelectTrail(trail)}
-                                >
-                                    <View style={{ flex: 1 }}>
-                                        <Text style={dStyles.trailSelectName}>{trail.name}</Text>
-                                        <Text style={dStyles.trailSelectMeta}>{formatMiles(trail.miles)} miles</Text>
-                                    </View>
-                                    <View style={[dStyles.trailSelectBadge, { backgroundColor: DIFFICULTY_COLORS[trail.difficulty] ?? theme.subtext }]}>
-                                        <Text style={dStyles.trailSelectBadgeText}>{trail.difficulty}</Text>
-                                    </View>
-                                </Pressable>
-                            ))
-                        )}
+                    <ScrollView
+                        showsVerticalScrollIndicator={false}
+                        style={{ flex: 1 }}
+                        contentContainerStyle={{
+                            paddingBottom: 40,
+                        }}
+                    >                        {trails.length === 0 ? (
+                        <Text style={[dStyles.trailCompleteSubtitle, { padding: 24, textAlign: 'center' }]}>
+                            You've finished every trail we currently have.
+                        </Text>
+                    ) : (
+                        trails.map(trail => (
+                            <Pressable
+                                key={trail.id}
+                                style={({ pressed }) => [dStyles.trailSelectRow, pressed && { opacity: 0.8 }]}
+                                onPress={() => onSelectTrail(trail)}
+                            >
+                                <View style={{ flex: 1 }}>
+                                    <Text style={dStyles.trailSelectName}>{trail.name}</Text>
+                                    <Text style={dStyles.trailSelectMeta}>{formatMiles(trail.miles)} miles</Text>
+                                </View>
+                                <View style={[dStyles.trailSelectBadge, { backgroundColor: DIFFICULTY_COLORS[trail.difficulty] ?? theme.subtext }]}>
+                                    <Text style={dStyles.trailSelectBadgeText}>{trail.difficulty}</Text>
+                                </View>
+                            </Pressable>
+                        ))
+                    )}
                     </ScrollView>
                 </View>
             </View>
@@ -947,7 +983,7 @@ export default function DashboardScreen() {
                 {/* CTA */}
                 <View style={dStyles.ctaRow}>
                     <Pressable style={dStyles.logButton} onPress={() => setLogModalOpen(true)}>
-                        <Text style={dStyles.logButtonText}>+ Log Today&apos;s Miles</Text>
+                        <Text style={dStyles.logButtonText}>Log Today's Miles</Text>
                     </Pressable>
                 </View>
 

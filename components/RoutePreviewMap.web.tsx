@@ -1,3 +1,6 @@
+// components/RoutePreviewMap.web.tsx
+// Web wrapper that lazy-loads the Leaflet preview to avoid SSR issues.
+
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 

@@ -1,3 +1,7 @@
+// lib/trails.ts
+// Trail data helpers. These functions fetch and normalize rows from Supabase
+// so the UI can work with a predictable shape.
+
 import { supabase } from '../utils/supabase';
 
 export type TrailDifficulty =
@@ -28,6 +32,7 @@ export type TrailDetails = TrailSummary & {
     isActive: boolean;
 };
 
+// Format a trail distance for display.
 export function formatMiles(miles: number): string {
     return Number.isFinite(miles) ? miles.toFixed(2) : '0.00';
 }
@@ -47,6 +52,7 @@ type TrailRow = {
     is_active?: boolean | null;
 };
 
+// Convert the database row into the UI-friendly `TrailSummary` shape.
 function normalizeTrail(row: TrailRow): TrailSummary {
     return {
         id: String(row.id),
@@ -61,6 +67,7 @@ function normalizeTrail(row: TrailRow): TrailSummary {
     };
 }
 
+// Fetch the active trail list in ascending mileage order.
 export async function fetchTrailList(): Promise<TrailSummary[]> {
     const { data, error } = await supabase
         .from('trails')
@@ -73,6 +80,27 @@ export async function fetchTrailList(): Promise<TrailSummary[]> {
     return (data ?? []).map((row) => normalizeTrail(row as TrailRow));
 }
 
+// OKAGE-facing: update the descriptive (non-structural) fields of a trail.
+// Mileage, difficulty, geometry, and active status are deliberately excluded
+// since they drive trail-unlock math rather than being plain display copy.
+export async function updateTrailInfo(
+    id: string,
+    fields: { route: string; highlights: string[]; historicalFocus: string; imageUrl: string }
+) {
+    const { error } = await supabase
+        .from('trails')
+        .update({
+            route: fields.route,
+            highlights: fields.highlights,
+            historical_focus: fields.historicalFocus,
+            image_url: fields.imageUrl || null,
+        })
+        .eq('id', id);
+
+    if (error) throw error;
+}
+
+// Fetch the full record for a single trail, including GeoJSON fields.
 export async function fetchTrailDetails(id: string) {
     const { data, error } = await supabase
         .from('trails')

@@ -1,3 +1,6 @@
+// components/RoutePreviewLeaflet.tsx
+// Leaflet version of the route preview map used on web.
+
 import { useEffect } from 'react';
 import { View, Text } from 'react-native';
 import L from 'leaflet';
@@ -15,6 +18,7 @@ type Props = {
 function FitBounds({ coords }: { coords: LatLng[] }) {
     const map = useMap();
 
+    // Keep the preview zoomed to the route geometry.
     useEffect(() => {
         if (!coords.length) return;
         map.fitBounds(L.latLngBounds(coords), { padding: [24, 24] });

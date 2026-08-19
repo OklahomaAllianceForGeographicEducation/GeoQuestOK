@@ -1,6 +1,6 @@
 // components/TrailMap.web.tsx
-// Leaflet touches `window` on import, which crashes Metro's SSR pass.
-// Solution: lazy-load the real map only after the component mounts in the browser.
+// Web trail map wrapper. Leaflet touches `window` on import, so we lazy-load
+// the real map only after the browser has mounted.
 
 import { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
@@ -11,13 +11,12 @@ import { View, Text, ActivityIndicator } from 'react-native';
 export default function TrailMap(props: any) {
     const { dStyles, theme } = props;
 
-    // Start as null — we render a placeholder until the browser is ready
+    // Start with no map component and show a placeholder while loading.
     const [LeafletMap, setLeafletMap] = useState<React.ComponentType<any> | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // This runs only in the browser, never during SSR
-        // Dynamic import keeps Leaflet out of the SSR bundle entirely
+        // Dynamic import keeps Leaflet out of the SSR bundle entirely.
         import('./LeafletMap')
             .then(mod => {
                 setLeafletMap(() => mod.default);

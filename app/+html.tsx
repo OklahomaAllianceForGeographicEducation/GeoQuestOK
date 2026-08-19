@@ -1,0 +1,48 @@
+// app/+html.tsx
+// Expo Router's root HTML document for the static web export (only used on
+// web -- native builds never see this file). Lets us set page-level <head>
+// content and global CSS that plain React Native styles can't reach.
+
+import { ScrollViewStyleReset } from 'expo-router/html';
+
+export default function Root({ children }: { children: React.ReactNode }) {
+    return (
+        <html lang="en">
+            <head>
+                <meta charSet="utf-8" />
+                <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+                <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+
+                {/* Disables the browser's default hover-based responsive
+                    layout for the root <ScrollView>, matching how the app
+                    already lays out full-screen scroll views natively. */}
+                <ScrollViewStyleReset />
+
+                <style dangerouslySetInnerHTML={{ __html: globalWebStyle }} />
+            </head>
+            <body>{children}</body>
+        </html>
+    );
+}
+
+// Selecting/highlighting text is a normal browser behavior, but on an
+// app-like screen full of cards, buttons, and map pins it's very easy to
+// accidentally click-drag across the whole page and highlight everything --
+// there's no real content here meant to be copy-pasted. `user-select: none`
+// on the page root stops that stray full-page selection while leaving actual
+// form fields (where selecting text is expected) untouched.
+const globalWebStyle = `
+html, body, #root {
+  -webkit-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+input, textarea, [contenteditable="true"] {
+  -webkit-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+`;

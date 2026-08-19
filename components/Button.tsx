@@ -1,12 +1,16 @@
+// components/Button.tsx
+// Shared full-width button used throughout the auth and account flows.
+
 import { Text, Pressable, StyleSheet, ViewStyle, StyleProp } from 'react-native';
-import { colors } from '../commonStyles'; // Adjust path if needed
+import { colors } from '../commonStyles';
 
 interface ButtonProps {
     label: string;
-    onPress?: () => void; // The '?' means it's optional
-    style?: StyleProp<ViewStyle>; // Allows you to pass custom styles like the red background
+    onPress?: () => void;
+    style?: StyleProp<ViewStyle>;
 }
 
+// Render a themed button with optional style overrides.
 export default function Button({ label, onPress, style }: ButtonProps) {
     const theme = colors['light'];
 
@@ -15,8 +19,8 @@ export default function Button({ label, onPress, style }: ButtonProps) {
             onPress={onPress}
             style={({ pressed }) => [
                 styles.button,
-                { backgroundColor: theme.accent }, // Your default theme color
-                style, // This allows the 'Red' background to override the default
+                { backgroundColor: theme.accent },
+                style,
                 pressed && { opacity: 0.8 }
             ]}
         >

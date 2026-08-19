@@ -1,3 +1,6 @@
+// components/RoutePreviewMap.native.tsx
+// Native route preview map for iOS and Android.
+
 import { useEffect, useRef } from 'react';
 import { View, Text } from 'react-native';
 import MapView, { Marker, Polyline, PROVIDER_DEFAULT, type Region } from 'react-native-maps';
@@ -15,6 +18,7 @@ type Props = {
 export default function RoutePreviewMap({ coords, region, accentColor, subtextColor, borderColor }: Props) {
     const mapRef = useRef<MapView | null>(null);
 
+    // Fit the preview map to the route once the coordinates are available.
     useEffect(() => {
         if (!mapRef.current || coords.length < 2) return;
 

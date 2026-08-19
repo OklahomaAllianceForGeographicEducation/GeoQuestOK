@@ -1,4 +1,8 @@
+// commonStyles.ts
+// Shared theme values and reusable StyleSheet factories used across screens.
+
 import { StyleSheet } from 'react-native';
+import type { TrailDifficulty } from './lib/trails';
 
 export type Theme = {
     background: string;
@@ -7,6 +11,12 @@ export type Theme = {
     subtext: string;
     accent: string;
     accentText: string;
+    // A woodsy pine green used sparingly as a second brand color -- the
+    // trail itself (route lines, "the path ahead") rather than the user's
+    // own progress/actions, which stay in `accent`. Deliberately not used
+    // everywhere: one restrained second color reads as sophisticated,
+    // three or four start to look busy.
+    secondary: string;
     border: string;
     shadow: string;
 };
@@ -18,8 +28,9 @@ export const colors: Record<'light' | 'dark', Theme> = {
         surface: '#FFFFFF',
         text: '#2C2C2C',
         subtext: '#8A8A8A',
-        accent: '#DE9027',
+        accent: '#de9027',
         accentText: '#FFFFFF',
+        secondary: '#1F5D50',
         border: '#EAE0D5',
         shadow: '#C4A882',
     },
@@ -28,15 +39,28 @@ export const colors: Record<'light' | 'dark', Theme> = {
         surface: '#2C2620',
         text: '#F6EFE7',
         subtext: '#A89880',
-        accent: '#DE9027',
+        accent: '#de9027',
         accentText: '#FFFFFF',
+        // Lightened a shade over the light theme's pine green so it stays
+        // legible against the dark background instead of receding into it.
+        secondary: '#3B8570',
         border: '#3D3530',
         shadow: '#0A0806',
     },
 };
 
-// ─── Global / shared styles ───────────────────────────────────────────────────
+export const DIFFICULTY_COLORS: Record<TrailDifficulty, string> = {
+    Easiest: '#4CAF50',
+    Easy: '#8BC34A',
+    'Easy-Moderate': '#CDDC39',
+    Moderate: '#FFC107',
+    'Moderate-Difficult': '#FF9800',
+    Difficult: '#FF5722',
+    'Very Difficult': '#E53935',
+    'Most Difficult': '#B71C1C',
+};
 
+// Build the shared styles used by account-related screens and common cards.
 export const getGlobalStyles = (theme: Theme) =>
     StyleSheet.create({
         landmarkScrollContainer: {
@@ -84,6 +108,11 @@ export const getGlobalStyles = (theme: Theme) =>
             paddingTop: 64,
             paddingBottom: 32,
         },
+        // Wraps avatarRing so the small pencil edit badge below has
+        // something to position itself against via `position: relative`.
+        avatarEditWrapper: {
+            position: 'relative',
+        },
         avatarRing: {
             width: 112,
             height: 112,
@@ -98,6 +127,23 @@ export const getGlobalStyles = (theme: Theme) =>
             borderWidth: 3,
             borderColor: theme.surface,
         },
+        // A small circular pencil badge overlaid on the avatar's
+        // bottom-right corner -- tapping the whole avatar (or just this
+        // badge) opens the customize sheet, replacing what used to be a
+        // separate full-width "Customize Avatar" button.
+        avatarEditBadge: {
+            position: 'absolute',
+            bottom: 0,
+            right: 0,
+            width: 34,
+            height: 34,
+            borderRadius: 17,
+            backgroundColor: theme.accent,
+            borderWidth: 3,
+            borderColor: theme.background,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
         profileGreeting: {
             fontFamily: 'Georgia',
             fontSize: 26,
@@ -105,6 +151,7 @@ export const getGlobalStyles = (theme: Theme) =>
             color: theme.text,
             marginTop: 16,
             letterSpacing: 0.3,
+            textAlign: 'center',
         },
         profileSubtext: {
             fontSize: 14,
@@ -116,6 +163,17 @@ export const getGlobalStyles = (theme: Theme) =>
             flex: 1,
             paddingHorizontal: 24,
             gap: 12,
+        },
+        // Small-print partnership/legal acknowledgement shown at the
+        // bottom of both the student and teacher account screens.
+        acknowledgementText: {
+            fontSize: 11,
+            lineHeight: 16,
+            color: theme.subtext,
+            textAlign: 'center',
+            paddingHorizontal: 32,
+            paddingTop: 24,
+            paddingBottom: 16,
         },
         card: {
             backgroundColor: theme.surface,
@@ -165,8 +223,7 @@ export const getGlobalStyles = (theme: Theme) =>
         },
     });
 
-// ─── Leaderboard-specific styles ─────────────────────────────────────────────
-
+// Build the styles for the leaderboard screen.
 export const getLeaderboardStyles = (theme: Theme) =>
     StyleSheet.create({
         header: {
@@ -355,8 +412,7 @@ export const getLeaderboardStyles = (theme: Theme) =>
         },
     });
 
-// ─── Dashboard styles ─────────────────────────────────────────────────────────
-
+// Build the styles for the dashboard screen.
 export const getDashboardStyles = (theme: Theme) =>
     StyleSheet.create({
         // Inside getDashboardStyles in commonStyles.ts
@@ -501,6 +557,9 @@ export const getDashboardStyles = (theme: Theme) =>
         landmarkDotFuture: {
             backgroundColor: theme.subtext,
         },
+        flagMarker: {
+            fontSize: 26,
+        },
         recenterButton: {
             position: 'absolute',
             bottom: 12,
@@ -586,6 +645,15 @@ export const getDashboardStyles = (theme: Theme) =>
             borderColor: theme.accent,
             opacity: 0.8,
         },
+        // A landmark the student hasn't walked far enough to reach yet:
+        // dimmed and (in LandmarkCard) untappable, matching the "All
+        // Landmarks" list's locked treatment.
+        landmarkCardLocked: {
+            opacity: 0.45,
+        },
+        landmarkCardTitleLocked: {
+            color: theme.subtext,
+        },
         noLandmarksBox: {
             marginHorizontal: 24,
             marginTop: 16,
@@ -605,7 +673,10 @@ export const getDashboardStyles = (theme: Theme) =>
         },
         allLandmarkRow: {
             flexDirection: 'row',
-            alignItems: 'center',
+            // flex-start (rather than center) keeps the mile marker pinned
+            // to the top-right corner of the row instead of drifting to an
+            // odd mid-point once the title wraps to two lines.
+            alignItems: 'flex-start',
             paddingVertical: 14,
             paddingHorizontal: 24,
             borderBottomWidth: 1,
@@ -632,6 +703,13 @@ export const getDashboardStyles = (theme: Theme) =>
             fontSize: 15,
             fontWeight: '600',
             color: theme.text,
+            // Without a flex value here, a long title has no bounded width
+            // to wrap against, so it overflows the row and shoves the mile
+            // marker text past the edge of the modal instead of wrapping.
+            // flex: 1 makes the title claim all space the row isn't using
+            // for the mile marker, so it wraps within that space instead.
+            flex: 1,
+            lineHeight: 20,
         },
         allLandmarkTitleLocked: {
             color: theme.subtext,
@@ -640,30 +718,29 @@ export const getDashboardStyles = (theme: Theme) =>
             fontSize: 12,
             color: theme.subtext,
             marginTop: 2,
+            // Keeps the mile marker at its natural width and right-aligned
+            // instead of being squeezed by the now-wrapping title next to it.
+            flexShrink: 0,
+            textAlign: 'right',
         },
         allLandmarkArrow: {
             fontSize: 18,
             color: theme.subtext,
         },
         modalOverlay: {
-            flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.45)',
             justifyContent: 'center',
             alignItems: 'center',
-            paddingTop: 50,
-            paddingBottom: 30,
+            paddingHorizontal: 16,
+            paddingVertical: 30,
         },
         modalSheet: {
             backgroundColor: theme.background,
             borderRadius: 24,
             overflow: 'hidden',
-
-            width: '92%',
+            width: '100%',
+            maxWidth: 960,
             maxHeight: 700,
             height: '72%',
-
-            marginTop: 50,
-            marginBottom: 30,
         },
         modalHeroImage: {
             width: '100%',
@@ -842,8 +919,7 @@ export const getDashboardStyles = (theme: Theme) =>
         },
     });
 
-// ─── Trail styles ─────────────────────────────────────────────────────────────
-
+// Build the styles for the trails screen.
 export const getTrailStyles = (theme: Theme) =>
     StyleSheet.create({
         // Screen header
@@ -943,16 +1019,18 @@ export const getTrailStyles = (theme: Theme) =>
 
         // ── Modal ──────────────────────────────────────────────
         modalOverlay: {
-            flex: 1,
             justifyContent: 'flex-end',
-            backgroundColor: 'rgba(0,0,0,0.45)',
+            paddingHorizontal: 16,
         },
         modalSheet: {
             backgroundColor: theme.background,
             borderTopLeftRadius: 32,
             borderTopRightRadius: 32,
             overflow: 'hidden',
+            width: '100%',
+            maxWidth: 960,
             height: '70%',
+            alignSelf: 'center',
         },
         modalImage: {
             width: '100%',
@@ -1067,8 +1145,7 @@ export const getTrailStyles = (theme: Theme) =>
         },
     });
 
-// ─── Test user ────────────────────────────────────────────────────────────────
-
+// Small placeholder avatar used by the leaderboard mock data.
 export const testUser = {
     profilePicture: `https://api.dicebear.com/7.x/bottts/svg?seed=test`
 };

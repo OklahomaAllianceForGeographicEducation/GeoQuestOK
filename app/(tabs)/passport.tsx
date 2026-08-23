@@ -104,6 +104,8 @@ function TrailCard({ trail, onPress, tStyles }: {
         <Pressable
             style={({ pressed }) => [tStyles.card, pressed && tStyles.cardPressed, { minHeight: 110 }]}
             onPress={onPress}
+            accessibilityRole="button"
+            accessibilityLabel={`${trail.name}, ${trail.difficulty}, ${formatMiles(trail.miles)} miles`}
         >
             {imageUri ? (
                 <Image
@@ -113,7 +115,11 @@ function TrailCard({ trail, onPress, tStyles }: {
                     transition={200}
                 />
             ) : (
-                <View style={[tStyles.cardImage, { alignItems: 'center', justifyContent: 'center' }]}>
+                // Previously fully transparent -- a large blank area with
+                // a tiny emoji glyph floating in the middle, which reads
+                // as a broken/empty card rather than a deliberate
+                // placeholder (caught live during an /impeccable audit).
+                <View style={[tStyles.cardImage, { backgroundColor: '#EAE0D5', alignItems: 'center', justifyContent: 'center' }]}>
                     <Text style={{ color: '#FFFFFF', fontSize: 28 }}>🗺️</Text>
                 </View>
             )}
@@ -415,7 +421,7 @@ export default function WornLeatherFieldJournal() {
     if (!isJournalOpen) {
         return (
             <View style={styles.outerCanvas}>
-                <Pressable style={styles.leatherCoverCard} onPress={() => setIsJournalOpen(true)}>
+                <Pressable style={styles.leatherCoverCard} onPress={() => setIsJournalOpen(true)} accessibilityRole="button" accessibilityLabel="Open field journal">
                     <View style={styles.goldEmbossedFrame}>
                         <View style={styles.spineStitchLine} />
                         <View style={styles.coverMainContent}>
@@ -460,7 +466,7 @@ export default function WornLeatherFieldJournal() {
                         {activeTab === 'passport' && (
                             <View>
                                 <View style={styles.fieldPageHeaderRow}>
-                                    <Text style={styles.vintagePageTitle}>Collected Stamps</Text>
+                                    <Text style={styles.vintagePageTitle} accessibilityRole="header">Collected Stamps</Text>
                                 </View>
                                 <View style={styles.inkUnderlineDivider} />
                                 <View style={styles.stampMatrixGrid}>
@@ -474,6 +480,8 @@ export default function WornLeatherFieldJournal() {
                                                     setSelectedBadge(badge);
                                                     setBadgeModalOpen(true);
                                                 }}
+                                                accessibilityRole="button"
+                                                accessibilityLabel={badge.unlocked ? badge.title : `${badge.title}, locked`}
                                             >
                                                 {/* Expanded Image Container filling maximum box real estate */}
                                                 <View style={[
@@ -500,12 +508,14 @@ export default function WornLeatherFieldJournal() {
                                     grid above, just called out in its own
                                     small section since it isn't a stamp. */}
                                 <View style={styles.fieldPageHeaderRow}>
-                                    <Text style={styles.vintagePageTitle}>Special Unlock</Text>
+                                    <Text style={styles.vintagePageTitle} accessibilityRole="header">Special Unlock</Text>
                                 </View>
                                 <View style={styles.inkUnderlineDivider} />
                                 <Pressable
                                     style={[styles.presidentsCard, presidentsUnlocked ? styles.unlockedStampBg : styles.lockedStampBg]}
                                     onPress={handlePresidentsCardPress}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={presidentsUnlocked ? 'Presidents in Oklahoma' : 'Presidents in Oklahoma, locked'}
                                 >
                                     <Text style={[styles.presidentsCardEmoji, !presidentsUnlocked && styles.badgeImageWrapperLocked]}>🏛️</Text>
                                     <View style={{ flex: 1 }}>
@@ -531,7 +541,7 @@ export default function WornLeatherFieldJournal() {
                         {activeTab === 'field_notes' && (
                             <View style={styles.linedPaperContainer}>
                                 <View style={styles.fieldPageHeaderRow}>
-                                    <Text style={styles.vintagePageTitle}>Field Observations</Text>
+                                    <Text style={styles.vintagePageTitle} accessibilityRole="header">Field Observations</Text>
                                 </View>
                                 <View style={styles.inkUnderlineDivider} />
                                 {journalEntries.length === 0 ? (
@@ -569,7 +579,7 @@ export default function WornLeatherFieldJournal() {
                         {activeTab === 'explore_trails' && (
                             <View>
                                 <View style={styles.fieldPageHeaderRow}>
-                                    <Text style={styles.vintagePageTitle}>Available Pathways</Text>
+                                    <Text style={styles.vintagePageTitle} accessibilityRole="header">Available Pathways</Text>
                                 </View>
                                 <View style={styles.inkUnderlineDivider} />
                                 <View style={{ gap: 4 }}>
@@ -592,7 +602,7 @@ export default function WornLeatherFieldJournal() {
                     book, including a special "COVER" tab that closes the
                     book entirely. */}
                 <View style={styles.rightSideTabsColumn}>
-                    <Pressable style={[styles.rightVerticalTab, styles.closeTabBg]} onPress={() => setIsJournalOpen(false)}>
+                    <Pressable style={[styles.rightVerticalTab, styles.closeTabBg]} onPress={() => setIsJournalOpen(false)} accessibilityRole="button" accessibilityLabel="Close journal">
                         <Ionicons name="book" size={16} color="#FFF" />
                         <Text style={styles.verticalTabButtonText}>COVER</Text>
                     </Pressable>
@@ -600,6 +610,9 @@ export default function WornLeatherFieldJournal() {
                     <Pressable
                         style={[styles.rightVerticalTab, activeTab === 'passport' ? styles.activeTabBg : styles.inactiveTabBg]}
                         onPress={() => setActiveTab('passport')}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: activeTab === 'passport' }}
+                        aria-selected={activeTab === 'passport'}
                     >
                         <Ionicons name="ribbon" size={16} color={activeTab === 'passport' ? '#4E3629' : '#C5A059'} />
                         <Text style={[styles.verticalTabButtonText, { color: activeTab === 'passport' ? '#4E3629' : '#EBE6DC' }]}>STAMPS</Text>
@@ -608,6 +621,9 @@ export default function WornLeatherFieldJournal() {
                     <Pressable
                         style={[styles.rightVerticalTab, activeTab === 'field_notes' ? styles.activeTabBg : styles.inactiveTabBg]}
                         onPress={() => setActiveTab('field_notes')}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: activeTab === 'field_notes' }}
+                        aria-selected={activeTab === 'field_notes'}
                     >
                         <Ionicons name="create" size={16} color={activeTab === 'field_notes' ? '#4E3629' : '#C5A059'} />
                         <Text style={[styles.verticalTabButtonText, { color: activeTab === 'field_notes' ? '#4E3629' : '#EBE6DC' }]}>NOTES</Text>
@@ -616,6 +632,9 @@ export default function WornLeatherFieldJournal() {
                     <Pressable
                         style={[styles.rightVerticalTab, activeTab === 'explore_trails' ? styles.activeTabBg : styles.inactiveTabBg]}
                         onPress={() => setActiveTab('explore_trails')}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected: activeTab === 'explore_trails' }}
+                        aria-selected={activeTab === 'explore_trails'}
                     >
                         <Ionicons name="map" size={16} color={activeTab === 'explore_trails' ? '#4E3629' : '#C5A059'} />
                         <Text style={[styles.verticalTabButtonText, { color: activeTab === 'explore_trails' ? '#4E3629' : '#EBE6DC' }]}>TRAILS</Text>
@@ -681,7 +700,7 @@ export default function WornLeatherFieldJournal() {
                                     <Text style={styles.parchmentLockedHint}>This stamp is locked. Keep walking and exploring Oklahoma to add it to your collection.</Text>
                                 )}
 
-                                <Pressable style={styles.closeParchmentBtn} onPress={closeBadgeModal}>
+                                <Pressable style={styles.closeParchmentBtn} onPress={closeBadgeModal} accessibilityRole="button" accessibilityLabel="Close">
                                     <Text style={styles.closeParchmentBtnText}>Return to Logbook</Text>
                                 </Pressable>
                             </View>
@@ -709,7 +728,7 @@ export default function WornLeatherFieldJournal() {
                                 </View>
                             )}
 
-                            <Pressable style={tStyles.closeButton} onPress={() => setSelectedTrail(null)}>
+                            <Pressable style={tStyles.closeButton} onPress={() => setSelectedTrail(null)} accessibilityRole="button" accessibilityLabel="Close">
                                 <Text style={tStyles.closeButtonText}>✕</Text>
                             </Pressable>
 
@@ -784,7 +803,7 @@ const styles = StyleSheet.create({
         // itself with 'absolute' relative to THIS card, so it can poke out
         // past the card's own right edge (see its negative `right` value).
         position: 'relative',
-        shadowColor: '#000',
+        shadowColor: '#C4A882',
         shadowOffset: { width: 4, height: 8 },
         shadowOpacity: 0.4,
         shadowRadius: 10,
@@ -806,17 +825,17 @@ const styles = StyleSheet.create({
     // out from the right edge of the book cover (right: -14, a NEGATIVE
     // value, pulls it partially outside the card's own bounds), simulating
     // a book-closure latch. top: '45%' roughly vertically centers it.
-    brassClaspStrap: { position: 'absolute', right: -14, top: '45%', width: 56, height: 64, backgroundColor: '#3D2B21', borderTopRightRadius: 8, borderBottomRightRadius: 8, borderLeftWidth: 3, borderLeftColor: '#C5A059', justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 2, height: 3 }, shadowOpacity: 0.3, shadowRadius: 3 },
+    brassClaspStrap: { position: 'absolute', right: -14, top: '45%', width: 56, height: 64, backgroundColor: '#3D2B21', borderTopRightRadius: 8, borderBottomRightRadius: 8, borderLeftWidth: 3, borderLeftColor: '#C5A059', justifyContent: 'center', alignItems: 'center', shadowColor: '#C4A882', shadowOffset: { width: 2, height: 3 }, shadowOpacity: 0.3, shadowRadius: 3 },
     brassButtonLatch: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#C5A059', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#A3803B' },
     latchActionLabel: { fontSize: 7, fontWeight: '900', color: '#C5A059', marginTop: 4, letterSpacing: 0.5 },
 
     // The open-book two-column layout: spine strip + page content,
     // side-by-side via flexDirection: 'row'.
-    openBookLayoutContainer: { flex: 1, flexDirection: 'row', backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 2, height: 6 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 8, borderWidth: 1, borderColor: '#C8C4B7' },
+    openBookLayoutContainer: { flex: 1, flexDirection: 'row', backgroundColor: '#FFF', borderRadius: 16, overflow: 'hidden', shadowColor: '#C4A882', shadowOffset: { width: 2, height: 6 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 8, borderWidth: 1, borderColor: '#C8C4B7' },
     // A thin, slightly darker vertical strip simulating the book's
     // physical spine/binding, complete with its own subtle shadow to
     // suggest a slight 3D fold where the pages meet.
-    internalBookBindingSpine: { width: 14, backgroundColor: '#EBEBE6', borderRightWidth: 1, borderRightColor: '#DCD4C4', shadowColor: '#000', shadowOffset: { width: 2, height: 0 }, shadowOpacity: 0.15, shadowRadius: 2, zIndex: 5 },
+    internalBookBindingSpine: { width: 14, backgroundColor: '#EBEBE6', borderRightWidth: 1, borderRightColor: '#DCD4C4', shadowColor: '#C4A882', shadowOffset: { width: 2, height: 0 }, shadowOpacity: 0.15, shadowRadius: 2, zIndex: 5 },
     notebookPaperPage: { flex: 1, backgroundColor: '#FFFFFF', position: 'relative' },
     fieldPageHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 6 },
     vintagePageTitle: { fontSize: 18, fontWeight: '800', fontFamily: 'Georgia', color: '#4E3629' },
@@ -847,12 +866,12 @@ const styles = StyleSheet.create({
     presidentsCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderRadius: 14, padding: 14 },
     presidentsCardEmoji: { fontSize: 32 },
     presidentsCardTitle: { fontSize: 15, fontWeight: '800', fontFamily: 'Georgia', color: '#4E3629' },
-    presidentsCardSubtitle: { fontSize: 12, color: '#8A8273', marginTop: 2 },
+    presidentsCardSubtitle: { fontSize: 12, color: '#756D5E', marginTop: 2 },
 
     linedPaperContainer: { flex: 1 },
-    emptyLinedPaperText: { fontSize: 13, fontStyle: 'italic', color: '#8A8273', fontFamily: 'Georgia', lineHeight: 22, marginTop: 20, textAlign: 'center' },
+    emptyLinedPaperText: { fontSize: 13, fontStyle: 'italic', color: '#756D5E', fontFamily: 'Georgia', lineHeight: 22, marginTop: 20, textAlign: 'center' },
     handwrittenLogBlock: { marginBottom: 18 },
-    handwrittenDateStamp: { fontSize: 11, fontWeight: '800', color: '#8A8273', textAlign: 'center', marginBottom: 6, letterSpacing: 1 },
+    handwrittenDateStamp: { fontSize: 11, fontWeight: '800', color: '#756D5E', textAlign: 'center', marginBottom: 6, letterSpacing: 1 },
     handwrittenMetricLine: { fontSize: 12, fontWeight: '600', color: '#5C5446', fontFamily: 'Georgia', marginBottom: 4, fontStyle: 'italic' },
     handwrittenParagraphText: { fontSize: 14, color: '#3A352B', fontFamily: 'Georgia', lineHeight: 22, fontStyle: 'italic', marginTop: 4, paddingLeft: 6 },
     // A short (40px), centered horizontal line used as a small decorative
@@ -877,11 +896,11 @@ const styles = StyleSheet.create({
     // black), keeping the "old book" color palette consistent even in the
     // modal's backdrop overlay.
     modalBlurOverlay: { flex: 1, backgroundColor: 'rgba(44,30,23,0.5)', justifyContent: 'center', alignItems: 'center', padding: 24 },
-    parchmentBadgeCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24, width: '100%', maxWidth: 320, borderWidth: 2, borderColor: '#4E3629', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6 },
+    parchmentBadgeCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24, width: '100%', maxWidth: 320, borderWidth: 2, borderColor: '#4E3629', shadowColor: '#C4A882', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6 },
     largeInkStampCircle: { width: 100, height: 100, justifyContent: 'center', alignItems: 'center', marginBottom: 12, backgroundColor: '#FFFFFF' },
     largeStampPNGSticker: { width: '100%', height: '100%' },
     parchmentModalTitle: { fontSize: 20, fontWeight: '800', fontFamily: 'Georgia', color: '#4E3629', textAlign: 'center' },
-    parchmentModalCategory: { fontSize: 10, fontWeight: '800', color: '#8A8273', letterSpacing: 1, textTransform: 'uppercase', marginTop: 2 },
+    parchmentModalCategory: { fontSize: 10, fontWeight: '800', color: '#756D5E', letterSpacing: 1, textTransform: 'uppercase', marginTop: 2 },
     parchmentModalDescription: { fontSize: 13, color: '#3A352B', fontFamily: 'Georgia', lineHeight: 18, marginTop: 4, marginBottom: 12, textAlign: 'center', width: '100%' },
     unlockedMetadataBadgeContainer: { width: '100%', alignItems: 'center', marginTop: 4 },
     // A soft green background (#E2ECD8) with dark green text (#2D4A22),
@@ -891,7 +910,7 @@ const styles = StyleSheet.create({
     // NOTE: howEarnedDetailSubtext is defined here but never referenced
     // anywhere in the component above — dead/unused style.
     howEarnedDetailSubtext: { fontSize: 11, color: '#5C5446', fontFamily: 'Georgia', marginTop: 4, fontStyle: 'italic' },
-    parchmentLockedHint: { fontSize: 12, color: '#8A8273', fontStyle: 'italic', fontFamily: 'Georgia', textAlign: 'center', lineHeight: 17, marginTop: 4 },
+    parchmentLockedHint: { fontSize: 12, color: '#756D5E', fontStyle: 'italic', fontFamily: 'Georgia', textAlign: 'center', lineHeight: 17, marginTop: 4 },
     closeParchmentBtn: { marginTop: 18, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DDD9D0', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 20 },
     closeParchmentBtnText: { color: '#4E3629', fontWeight: '700', fontSize: 13 }
 });

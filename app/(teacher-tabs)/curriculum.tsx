@@ -12,11 +12,11 @@ import {
     ScrollView,
     StyleSheet,
     Text,
-    View
-} from 'react-native';
-import { colors } from '../../commonStyles';
+    View, useColorScheme } from 'react-native';
+import { colors, Theme } from '../../commonStyles';
 import EdgeSwipeBack from '../../components/EdgeSwipeBack';
 import FullLessonPlanModal from '../../components/FullLessonPlanModal';
+import TourTarget from '../../components/tour/TourTarget';
 import { confirmAlert } from '../../lib/confirmAlert';
 import { fetchLessonPlansForTrail, GRADE_TIERS, LESSON_SUBJECTS, resolveLessonPlans, type GradeTier } from '../../lib/curriculum';
 import { fetchFullLessonsForTrail, type FullLessonPlan } from '../../lib/fullLessons';
@@ -73,7 +73,9 @@ function showAlert(title: string, message: string) {
 }
 
 export default function CurriculumHub() {
-    const theme = colors.light;
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
+    const styles = getStyles(theme);
 
     // Trail catalog + selection
     const [trails, setTrails] = useState<TrailSummary[]>([]);
@@ -458,13 +460,13 @@ export default function CurriculumHub() {
                     contentContainerStyle={{ padding: 24, paddingBottom: 60 }}
                     showsVerticalScrollIndicator={false}
                 >
-                    <Pressable style={styles.backLink} onPress={() => setSelectedTrail(null)}>
+                    <Pressable style={styles.backLink} onPress={() => setSelectedTrail(null)} accessibilityRole="button">
                         <Ionicons name="arrow-back" size={16} color={theme.accent} />
                         <Text style={[styles.backLinkText, { color: theme.accent }]}>Back to Trail Matrix</Text>
                     </Pressable>
 
                     <View style={[styles.detailHero, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                        <Text style={[styles.detailTitle, { color: theme.text }]}>{selectedTrail.name}</Text>
+                        <Text style={[styles.detailTitle, { color: theme.text }]} accessibilityRole="header">{selectedTrail.name}</Text>
 
                         <View style={styles.badgeRow}>
                             <View style={[styles.tierBadge, { backgroundColor: theme.background, borderColor: theme.border }]}>
@@ -508,6 +510,7 @@ export default function CurriculumHub() {
                             <Pressable
                                 style={[styles.adminEditChip, { borderColor: theme.accent }]}
                                 onPress={() => handleEditFrameworkMessage(selectedTrail.name)}
+                                accessibilityRole="button"
                             >
                                 <Ionicons name="create-outline" size={14} color={theme.accent} />
                                 <Text style={[styles.adminEditText, { color: theme.accent }]}>Modify Framework Fields</Text>
@@ -522,15 +525,18 @@ export default function CurriculumHub() {
                                 key={tier.value}
                                 style={[styles.segmentItem, gradeTier === tier.value && { backgroundColor: theme.accent }]}
                                 onPress={() => setGradeTier(tier.value)}
+                                accessibilityRole="tab"
+                                accessibilityState={{ selected: gradeTier === tier.value }}
+                                aria-selected={gradeTier === tier.value}
                             >
-                                <Text style={[styles.segmentText, gradeTier === tier.value ? { color: '#FFF' } : { color: theme.text }]}>
+                                <Text style={[styles.segmentText, gradeTier === tier.value ? { color: theme.accentText } : { color: theme.text }]}>
                                     {tier.label}
                                 </Text>
                             </Pressable>
                         ))}
                     </View>
 
-                    <Text style={[styles.sectionHeading, { color: theme.text }]}>Lesson Guide Integrations</Text>
+                    <Text style={[styles.sectionHeading, { color: theme.text }]} accessibilityRole="header">Lesson Guide Integrations</Text>
 
                     {lessonPlansLoading ? (
                         <ActivityIndicator size="small" color={theme.accent} style={{ marginBottom: 12 }} />
@@ -567,6 +573,7 @@ export default function CurriculumHub() {
                                         <Pressable
                                             style={[styles.fullLessonLink, { borderColor: theme.accent }]}
                                             onPress={() => handleOpenFullLesson(subject.value)}
+                                            accessibilityRole="button"
                                         >
                                             <Ionicons name="document-text-outline" size={14} color={theme.accent} />
                                             <Text style={[styles.fullLessonLinkText, { color: theme.accent }]}>View Full Lesson Plan</Text>
@@ -582,14 +589,14 @@ export default function CurriculumHub() {
                     <View style={[styles.divider, { backgroundColor: theme.border, marginTop: 8 }]} />
                     <View style={styles.quizSectionHeader}>
                         <Ionicons name="help-circle-outline" size={18} color={theme.accent} />
-                        <Text style={[styles.sectionHeading, { color: theme.text, marginBottom: 0 }]}>Quiz Bank</Text>
+                        <Text style={[styles.sectionHeading, { color: theme.text, marginBottom: 0 }]} accessibilityRole="header">Quiz Bank</Text>
                     </View>
                     <Text style={[styles.subTextDescription, { color: theme.subtext }]}>
-                        Browse this trail's quiz questions and assign them to a class. Students in that class will see the
+                        Browse this trail&apos;s quiz questions and assign them to a class. Students in that class will see the
                         quiz pop up once they have walked past the landmark it is tied to.
                     </Text>
 
-                    <Text style={[styles.sectionHeading, { color: theme.text }]}>Class</Text>
+                    <Text style={[styles.sectionHeading, { color: theme.text }]} accessibilityRole="header">Class</Text>
                     {classes.length === 0 ? (
                         <Text style={[styles.emptyText, { color: theme.subtext }]}>
                             You do not have any classes yet — create one in the Classes tab first.
@@ -606,15 +613,18 @@ export default function CurriculumHub() {
                                             { borderColor: theme.border, backgroundColor: active ? theme.accent : theme.surface },
                                         ]}
                                         onPress={() => setSelectedClassId(cls.id)}
+                                        accessibilityRole="radio"
+                                        accessibilityState={{ selected: active }}
+                                        aria-selected={active}
                                     >
-                                        <Text style={[styles.chipText, { color: active ? '#FFF' : theme.text }]}>{cls.className}</Text>
+                                        <Text style={[styles.chipText, { color: active ? theme.accentText : theme.text }]}>{cls.className}</Text>
                                     </Pressable>
                                 );
                             })}
                         </View>
                     )}
 
-                    <Text style={[styles.sectionHeading, { color: theme.text }]}>Filter by Grade</Text>
+                    <Text style={[styles.sectionHeading, { color: theme.text }]} accessibilityRole="header">Filter by Grade</Text>
                     <View style={styles.chipRow}>
                         {GRADE_BANDS.map((band) => {
                             const active = gradeFilter.has(band.value);
@@ -626,8 +636,11 @@ export default function CurriculumHub() {
                                         { borderColor: theme.accent, backgroundColor: active ? theme.accent : 'transparent' },
                                     ]}
                                     onPress={() => setGradeFilter((prev) => toggleInSet(prev, band.value))}
+                                    accessibilityRole="checkbox"
+                                    accessibilityState={{ checked: active }}
+                                    aria-checked={active}
                                 >
-                                    <Text style={[styles.filterChipText, { color: active ? '#FFF' : theme.accent }]}>{band.label}</Text>
+                                    <Text style={[styles.filterChipText, { color: active ? theme.accentText : theme.accent }]}>{band.label}</Text>
                                 </Pressable>
                             );
                         })}
@@ -639,7 +652,7 @@ export default function CurriculumHub() {
                         `subjects` is derived from the question list). */}
                     {subjects.length > 0 ? (
                         <>
-                            <Text style={[styles.sectionTitle, { color: theme.text }]}>Filter by Subject</Text>
+                            <Text style={[styles.sectionTitle, { color: theme.text }]} accessibilityRole="header">Filter by Subject</Text>
                             <View style={styles.chipRow}>
                                 {subjects.map((subject) => {
                                     const active = subjectFilter.has(subject);
@@ -651,12 +664,15 @@ export default function CurriculumHub() {
                                                 { borderColor: theme.accent, backgroundColor: active ? theme.accent : 'transparent' },
                                             ]}
                                             onPress={() => setSubjectFilter((prev) => toggleInSet(prev, subject))}
+                                            accessibilityRole="checkbox"
+                                            accessibilityState={{ checked: active }}
+                                            aria-checked={active}
                                         >
                                             {/* Capitalizes just the first
                                                 letter of the raw subject
                                                 value for display (e.g.
                                                 "math" → "Math"). */}
-                                            <Text style={[styles.filterChipText, { color: active ? '#FFF' : theme.accent }]}>
+                                            <Text style={[styles.filterChipText, { color: active ? theme.accentText : theme.accent }]}>
                                                 {subject.charAt(0).toUpperCase() + subject.slice(1)}
                                             </Text>
                                         </Pressable>
@@ -680,6 +696,7 @@ export default function CurriculumHub() {
                                 // questions to act on at all.
                                 disabled={bulkBusy || filteredQuestions.length === 0}
                                 onPress={() => void handleBulkAssign(true)}
+                                accessibilityRole="button"
                             >
                                 <Text style={[styles.bulkButtonText, { color: theme.accent }]}>Assign All Filtered</Text>
                             </Pressable>
@@ -687,6 +704,7 @@ export default function CurriculumHub() {
                                 style={[styles.bulkButton, { borderColor: theme.border }]}
                                 disabled={bulkBusy || filteredQuestions.length === 0}
                                 onPress={() => void handleBulkAssign(false)}
+                                accessibilityRole="button"
                             >
                                 <Text style={[styles.bulkButtonText, { color: theme.subtext }]}>Unassign All Filtered</Text>
                             </Pressable>
@@ -695,11 +713,11 @@ export default function CurriculumHub() {
                     )}
 
                     <View style={styles.questionsHeaderRow}>
-                        <Text style={[styles.sectionTitle, { color: theme.text, marginTop: 0, marginBottom: 0 }]}>
+                        <Text style={[styles.sectionTitle, { color: theme.text, marginTop: 0, marginBottom: 0 }]} accessibilityRole="header">
                             Questions ({filteredQuestions.length})
                         </Text>
                         {showQuestionList && groupedByLandmark.length > 0 && (
-                            <Pressable onPress={toggleExpandAll}>
+                            <Pressable onPress={toggleExpandAll} accessibilityRole="button">
                                 <Text style={[styles.expandAllText, { color: theme.accent }]}>
                                     {allLandmarksExpanded ? 'Collapse All' : 'Expand All'}
                                 </Text>
@@ -720,7 +738,7 @@ export default function CurriculumHub() {
                             <Text style={[styles.filterPromptText, { color: theme.text }]}>
                                 Pick a grade and/or subject above to see matching questions.
                             </Text>
-                            <Pressable onPress={() => setShowAllOverride(true)}>
+                            <Pressable onPress={() => setShowAllOverride(true)} accessibilityRole="button">
                                 <Text style={[styles.filterPromptLink, { color: theme.accent }]}>
                                     Or browse all {questions.length} questions at once
                                 </Text>
@@ -738,6 +756,9 @@ export default function CurriculumHub() {
                                     <Pressable
                                         style={[styles.landmarkHeaderRow, { backgroundColor: theme.surface, borderColor: theme.border }]}
                                         onPress={() => toggleLandmarkExpanded(group.landmarkTitle)}
+                                        accessibilityRole="button"
+                                        accessibilityState={{ expanded: isExpanded }}
+                                        aria-expanded={isExpanded}
                                     >
                                         <Ionicons name={isExpanded ? 'chevron-down' : 'chevron-forward'} size={16} color={theme.subtext} />
                                         <Text style={[styles.landmarkHeading, { color: theme.text, flex: 1, marginBottom: 0 }]}>{group.landmarkTitle}</Text>
@@ -786,17 +807,21 @@ export default function CurriculumHub() {
                                                             ]}
                                                             disabled={isBusy}
                                                             onPress={() => void handleToggleAssignment(question)}
+                                                            accessibilityRole="switch"
+                                                            accessibilityState={{ checked: isAssigned }}
+                                                            aria-checked={isAssigned}
+                                                            accessibilityLabel={isAssigned ? 'Assigned to this class' : 'Assign to this class'}
                                                         >
                                                             {isBusy ? (
-                                                                <ActivityIndicator size="small" color={isAssigned ? '#FFF' : theme.accent} />
+                                                                <ActivityIndicator size="small" color={isAssigned ? theme.accentText : theme.accent} />
                                                             ) : (
                                                                 <>
                                                                     <Ionicons
                                                                         name={isAssigned ? 'checkmark-circle' : 'add-circle-outline'}
                                                                         size={16}
-                                                                        color={isAssigned ? '#FFF' : theme.accent}
+                                                                        color={isAssigned ? theme.accentText : theme.accent}
                                                                     />
-                                                                    <Text style={[styles.assignToggleText, { color: isAssigned ? '#FFF' : theme.accent }]}>
+                                                                    <Text style={[styles.assignToggleText, { color: isAssigned ? theme.accentText : theme.accent }]}>
                                                                         {isAssigned ? 'Assigned' : 'Assign'}
                                                                     </Text>
                                                                 </>
@@ -833,48 +858,59 @@ export default function CurriculumHub() {
                 showsVerticalScrollIndicator={false}
             >
                 <Text style={[styles.kicker, { color: theme.accent }]}>CURRICULUM & QUIZ RESOURCE MANUAL</Text>
-                <Text style={[styles.mainHeading, { color: theme.text }]}>Oklahoma History Trails</Text>
+                <Text style={[styles.mainHeading, { color: theme.text }]} accessibilityRole="header">Oklahoma History Trails</Text>
                 <Text style={[styles.introText, { color: theme.subtext }]}>
                     Select a trail below to see its cross-curricular lesson modules and assign its quiz questions to a class.
                 </Text>
 
-                <Text style={[styles.sectionHeading, { color: theme.text, marginTop: 12 }]}>Available Trails</Text>
+                <Text style={[styles.sectionHeading, { color: theme.text, marginTop: 12 }]} accessibilityRole="header">Available Trails</Text>
 
                 {trails.length === 0 ? (
                     <Text style={[styles.emptyText, { color: theme.subtext }]}>No trails available yet.</Text>
                 ) : (
-                    trails.map((trail) => (
-                        <Pressable
-                            key={trail.id}
-                            style={({ pressed }) => [
-                                styles.trailRowCard,
-                                { backgroundColor: theme.surface, borderColor: theme.border },
-                                pressed && { opacity: 0.8 }
-                            ]}
-                            onPress={() => setSelectedTrail(trail)}
-                        >
-                            <View style={{ flex: 1, paddingRight: 12 }}>
-                                <Text style={[styles.trailRowName, { color: theme.text }]}>{trail.name}</Text>
-                                {!!trail.route && <Text style={[styles.trailRowMeta, { color: theme.subtext }]}>{trail.route}</Text>}
-                                <View style={styles.badgeRow}>
-                                    <View style={[styles.inlineBadge, { backgroundColor: theme.background, borderColor: theme.border }]}>
-                                        <Text style={{ fontSize: 10, fontWeight: '700', color: theme.accent }}>{formatMiles(trail.miles)} MI</Text>
-                                    </View>
-                                    <View style={[styles.inlineBadge, { backgroundColor: theme.background, borderColor: theme.border }]}>
-                                        <Text style={{ fontSize: 10, fontWeight: '700', color: theme.text }}>{trail.difficulty.toUpperCase()}</Text>
+                    trails.map((trail, trailIndex) => {
+                        const card = (
+                            <Pressable
+                                style={({ pressed }) => [
+                                    styles.trailRowCard,
+                                    { backgroundColor: theme.surface, borderColor: theme.border },
+                                    pressed && { opacity: 0.8 }
+                                ]}
+                                onPress={() => setSelectedTrail(trail)}
+                                accessibilityRole="button"
+                                accessibilityLabel={`${trail.name}, ${trail.difficulty}, ${formatMiles(trail.miles)} miles`}
+                            >
+                                <View style={{ flex: 1, paddingRight: 12 }}>
+                                    <Text style={[styles.trailRowName, { color: theme.text }]}>{trail.name}</Text>
+                                    {!!trail.route && <Text style={[styles.trailRowMeta, { color: theme.subtext }]}>{trail.route}</Text>}
+                                    <View style={styles.badgeRow}>
+                                        <View style={[styles.inlineBadge, { backgroundColor: theme.background, borderColor: theme.border }]}>
+                                            <Text style={{ fontSize: 10, fontWeight: '700', color: theme.accent }}>{formatMiles(trail.miles)} MI</Text>
+                                        </View>
+                                        <View style={[styles.inlineBadge, { backgroundColor: theme.background, borderColor: theme.border }]}>
+                                            <Text style={{ fontSize: 10, fontWeight: '700', color: theme.text }}>{trail.difficulty.toUpperCase()}</Text>
+                                        </View>
                                     </View>
                                 </View>
-                            </View>
-                            <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
-                        </Pressable>
-                    ))
+                                <Ionicons name="chevron-forward" size={18} color={theme.subtext} />
+                            </Pressable>
+                        );
+                        // Only the first trail card is a tour target -- the
+                        // guided tour just needs one real example of "tap a
+                        // trail to assign its quiz," not one per trail.
+                        return trailIndex === 0 ? (
+                            <TourTarget key={trail.id} id="teacher.curriculumTrailCard">{card}</TourTarget>
+                        ) : (
+                            <View key={trail.id}>{card}</View>
+                        );
+                    })
                 )}
             </ScrollView>
         </View>
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     mainScroll: { flex: 1 },
     container: { flex: 1 },
@@ -902,7 +938,7 @@ const styles = StyleSheet.create({
     badgeRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
     tierBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, borderWidth: 1 },
     divider: { height: 1, marginVertical: 14 },
-    metaLabel: { fontSize: 11, fontWeight: '800', color: '#666', letterSpacing: 1, marginTop: 12, marginBottom: 4 },
+    metaLabel: { fontSize: 11, fontWeight: '800', color: theme.subtext, letterSpacing: 1, marginTop: 12, marginBottom: 4 },
     metaBody: { fontSize: 14, lineHeight: 19, marginBottom: 4 },
 
     // The dashed border here visually signals "special/admin-only action"
@@ -926,7 +962,7 @@ const styles = StyleSheet.create({
     segmentItem: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center' },
     segmentText: { fontSize: 13, fontWeight: '700' },
 
-    sectionHeading: { fontSize: 11, fontWeight: '800', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1, color: '#666' },
+    sectionHeading: { fontSize: 11, fontWeight: '800', marginBottom: 12, textTransform: 'uppercase', letterSpacing: 1, color: theme.subtext },
     subjectCard: { borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 12 },
     subjectHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10, gap: 8 },
     subjectTitle: { fontSize: 15, fontWeight: '700' },
@@ -951,7 +987,7 @@ const styles = StyleSheet.create({
         fontSize: 11,
         fontWeight: '800',
         letterSpacing: 1,
-        color: '#666',
+        color: theme.subtext,
         marginBottom: 10,
         marginTop: 18,
         textTransform: 'uppercase',

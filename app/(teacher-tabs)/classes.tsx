@@ -23,12 +23,12 @@ import {
     Switch,
     Text,
     TextInput,
-    View
-} from 'react-native';
+    View, useColorScheme } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '../../commonStyles';
+import { colors, Theme } from '../../commonStyles';
 import AdaptiveBlur from '../../components/AdaptiveBlur';
 import EdgeSwipeBack from '../../components/EdgeSwipeBack';
+import TourTarget from '../../components/tour/TourTarget';
 import { confirmAlert } from '../../lib/confirmAlert';
 import { fetchClassQuizParticipation, type QuizParticipation } from '../../lib/quizzes';
 import { formatMiles } from '../../lib/trails';
@@ -61,7 +61,9 @@ type StudentProfile = {
 };
 
 export default function ClassManagementHub() {
-    const theme = colors.light;
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
+    const styles = getStyles(theme);
 
     // Core Screen Indicators
     const [loading, setLoading] = useState(true);
@@ -153,7 +155,7 @@ export default function ClassManagementHub() {
                 if (updatedMatch) setSelectedClass(updatedMatch);
             }
         } catch (err: any) {
-            Alert.alert("Data Error", err.message || "Failed to download your class records.");
+            Alert.alert("Data Error", err.message || "Could not load your classes. Please try again.");
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -223,7 +225,7 @@ export default function ClassManagementHub() {
                 setQuizParticipation(new Map());
             }
         } catch {
-            Alert.alert("Roster Error", "Could not synchronize student tracking logs.");
+            Alert.alert("Roster Error", "Could not load the class roster. Please try again.");
         } finally {
             setRosterLoading(false);
         }
@@ -297,7 +299,7 @@ export default function ClassManagementHub() {
             Alert.alert("Class Generated! ✨", `Give your students Join Code: ${assignedJoinCode}`);
             await loadTeacherClasses();
         } catch (err: any) {
-            Alert.alert("Creation Failure", err.message || "An unexpected database block intercepted the setup.");
+            Alert.alert("Creation Failure", err.message || "Something went wrong creating the class. Please try again.");
         } finally {
             setSubmitting(false);
         }
@@ -322,7 +324,7 @@ export default function ClassManagementHub() {
             setSelectedClass({ ...currentClass, is_anonymous_required: value });
             setClasses(prev => prev.map(c => c.id === currentClass.id ? { ...c, is_anonymous_required: value } : c));
         } catch {
-            Alert.alert("Sync Error", "Could not propagate safety changes to student devices.");
+            Alert.alert("Sync Error", "Could not save that setting. Please try again.");
         }
     }
 
@@ -334,7 +336,7 @@ export default function ClassManagementHub() {
     const handleRemoveStudent = (student: StudentProfile) => {
         confirmAlert(
             "Remove Student",
-            `Are you sure you want to remove ${student.display_name || student.username} from this classroom? This will untether them from your gradebook visibility instantly.`,
+            `Remove ${student.display_name || student.username} from this class? They'll lose access to this class's roster and leaderboard right away.`,
             [
                 { text: "Cancel", style: "cancel" },
                 {
@@ -352,7 +354,7 @@ export default function ClassManagementHub() {
                             // Locally pop item out of view array instantly
                             setRoster(prev => prev.filter(s => s.membership_id !== student.membership_id));
                         } catch (err: any) {
-                            Alert.alert("Error", "Could not execute enrollment eviction.");
+                            Alert.alert("Error", "Could not remove that student. Please try again.");
                         }
                     }
                 }
@@ -382,11 +384,11 @@ export default function ClassManagementHub() {
                     first line of scrollable content, easy to scroll past
                     and forget about. */}
                 <View style={[styles.detailHeaderBar, { borderBottomColor: theme.border, backgroundColor: theme.background }]}>
-                    <Pressable style={styles.backButton} onPress={() => { setSelectedClass(null); setRoster([]); }} hitSlop={8}>
+                    <Pressable style={styles.backButton} onPress={() => { setSelectedClass(null); setRoster([]); }} hitSlop={8} accessibilityRole="button">
                         <Ionicons name="arrow-back" size={20} color={theme.accent} />
                         <Text style={[styles.backButtonText, { color: theme.accent }]}>All Classes</Text>
                     </Pressable>
-                    <Text style={[styles.detailHeaderTitle, { color: theme.text }]} numberOfLines={1}>{selectedClass.class_name}</Text>
+                    <Text style={[styles.detailHeaderTitle, { color: theme.text }]} numberOfLines={1} accessibilityRole="header">{selectedClass.class_name}</Text>
                 </View>
                 {/* EdgeSwipeBack only spans the content area below the
                     header bar (not the header itself), so it never
@@ -427,7 +429,7 @@ export default function ClassManagementHub() {
                     </View>
                 </View>
 
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>Enrolled Students ({roster.length})</Text>
+                <Text style={[styles.sectionTitle, { color: theme.text }]} accessibilityRole="header">Enrolled Students ({roster.length})</Text>
 
                 {rosterLoading ? (
                     <ActivityIndicator size="small" color={theme.accent} style={{ marginTop: 20 }} />
@@ -492,8 +494,10 @@ export default function ClassManagementHub() {
                                     <Pressable
                                         onPress={() => handleRemoveStudent(student)}
                                         style={styles.removeCircleButton}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={`Remove ${student.display_name || student.username} from this class`}
                                     >
-                                        <Ionicons name="trash-outline" size={18} color="#FF3B30" />
+                                        <Ionicons name="trash-outline" size={18} color={theme.error} />
                                     </Pressable>
                                 </View>
                             </View>
@@ -515,24 +519,27 @@ export default function ClassManagementHub() {
                 contentContainerStyle={{ padding: 24, paddingBottom: 40 }}
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); void loadTeacherClasses(); }} colors={[theme.accent]} />}
             >
-                <Text style={[styles.kicker, { color: theme.accent }]}>WORKSPACE DIRECTORY</Text>
-                <Text style={[styles.mainHeading, { color: theme.text }]}>Classroom Groups</Text>
+                <Text style={[styles.kicker, { color: theme.accent }]}>MY CLASSES</Text>
+                <Text style={[styles.mainHeading, { color: theme.text }]} accessibilityRole="header">My Classes</Text>
                 <Text style={[styles.subTextDescription, { color: theme.subtext }]}>
-                    Review active join code rosters, adjust anonymity permissions, and manage student grade compliance boundaries.
+                    See your classes, manage join codes, and keep student rosters up to date.
                 </Text>
 
-                <Pressable
-                    style={({ pressed }) => [styles.launchSheetButton, { backgroundColor: theme.accent, opacity: pressed ? 0.9 : 1 }]}
-                    onPress={() => setIsSheetOpen(true)}
-                >
-                    <Text style={styles.launchButtonText}>+ Setup New Classroom Team</Text>
-                </Pressable>
+                <TourTarget id="teacher.createClassButton">
+                    <Pressable
+                        style={({ pressed }) => [styles.launchSheetButton, { backgroundColor: theme.accent, opacity: pressed ? 0.9 : 1 }]}
+                        onPress={() => setIsSheetOpen(true)}
+                        accessibilityRole="button"
+                    >
+                        <Text style={styles.launchButtonText}>+ Create a New Class</Text>
+                    </Pressable>
+                </TourTarget>
 
-                <Text style={[styles.sectionTitle, { color: theme.text }]}>Active Managed Groups</Text>
+                <Text style={[styles.sectionTitle, { color: theme.text }]} accessibilityRole="header">Your Classes</Text>
 
                 {classes.length === 0 ? (
                     <View style={styles.emptyContainer}>
-                        <Text style={[styles.emptyText, { color: theme.subtext }]}>You have not added any tracking classrooms yet.</Text>
+                        <Text style={[styles.emptyText, { color: theme.subtext }]}>You haven&apos;t created any classes yet.</Text>
                     </View>
                 ) : (
                     classes.map((cls) => (
@@ -547,6 +554,8 @@ export default function ClassManagementHub() {
                                 setSelectedClass(cls);
                                 void loadClassRoster(cls.id);
                             }}
+                            accessibilityRole="button"
+                            accessibilityLabel={`${cls.class_name}, join code ${cls.id}${cls.is_anonymous_required ? ', anonymous nicknames enforced' : ''}`}
                         >
                             <View style={{ flex: 1, paddingRight: 8 }}>
                                 <Text style={[styles.classSelectorTitleText, { color: theme.text }]}>{cls.class_name}</Text>
@@ -579,14 +588,14 @@ export default function ClassManagementHub() {
                     <View style={[styles.sheet, { backgroundColor: theme.background }]}>
                         <ScrollView contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                             <View style={styles.sheetHeaderRow}>
-                                <Text style={[styles.sheetTitle, { color: theme.text }]}>Create New Class</Text>
-                                <Pressable onPress={() => setIsSheetOpen(false)}>
+                                <Text style={[styles.sheetTitle, { color: theme.text }]} accessibilityRole="header">Create New Class</Text>
+                                <Pressable onPress={() => setIsSheetOpen(false)} accessibilityRole="button" accessibilityLabel="Close">
                                     <Ionicons name="close-circle" size={24} color={theme.subtext} />
                                 </Pressable>
                             </View>
                             <View style={[styles.sheetDivider, { backgroundColor: theme.border }]} />
 
-                            <Text style={styles.label}>CLASS DISPLAY NAME</Text>
+                            <Text style={styles.label}>CLASS NAME</Text>
                             <TextInput
                                 value={newClassName}
                                 onChangeText={setNewClassName}
@@ -607,29 +616,29 @@ export default function ClassManagementHub() {
                             />
                             <Text style={styles.helperText}>Alphanumeric codes are easiest for student keyboard configurations.</Text>
 
-                            <Text style={[styles.label, { marginTop: 14 }]}>ROSTER ASSIGNED SCHOOL SITE</Text>
+                            <Text style={[styles.label, { marginTop: 14 }]}>SCHOOL</Text>
                             <TextInput
                                 value={overrideSchool}
                                 onChangeText={setOverrideSchool}
                                 style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
-                                placeholder="School Building Site"
+                                placeholder="e.g., Lincoln Elementary"
                             />
 
-                            <Text style={styles.label}>DISTRICT AFFILIATION NAME</Text>
+                            <Text style={styles.label}>DISTRICT</Text>
                             <TextInput
                                 value={overrideDistrict}
                                 onChangeText={setOverrideDistrict}
                                 style={[styles.input, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
-                                placeholder="District Boundary Name"
+                                placeholder="e.g., Norman Public Schools"
                             />
-                            <Text style={styles.helperText}>💡 Pre-filled from profile parameters. Adjust anytime for external scouting or tracking events.</Text>
+                            <Text style={styles.helperText}>💡 Pre-filled from your profile. Adjust anytime for scouting or other tracking events.</Text>
 
                             <View style={styles.sheetActions}>
-                                <Pressable style={[styles.actionButton, styles.cancelButton, { borderColor: theme.border }]} onPress={() => setIsSheetOpen(false)}>
+                                <Pressable style={[styles.actionButton, styles.cancelButton, { borderColor: theme.border }]} onPress={() => setIsSheetOpen(false)} accessibilityRole="button">
                                     <Text style={[styles.cancelText, { color: theme.text }]}>Cancel</Text>
                                 </Pressable>
-                                <Pressable style={[styles.actionButton, styles.saveButton, { backgroundColor: theme.accent }]} onPress={() => void handleCreateClass()} disabled={submitting}>
-                                    {submitting ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.saveText}>Generate Class</Text>}
+                                <Pressable style={[styles.actionButton, styles.saveButton, { backgroundColor: theme.accent }]} onPress={() => void handleCreateClass()} disabled={submitting} accessibilityRole="button">
+                                    {submitting ? <ActivityIndicator color={theme.accentText} size="small" /> : <Text style={styles.saveText}>Create Class</Text>}
                                 </Pressable>
                             </View>
                         </ScrollView>
@@ -640,15 +649,15 @@ export default function ClassManagementHub() {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     container: { flex: 1 },
     kicker: { fontSize: 11, letterSpacing: 1.2, fontWeight: '800', marginBottom: 6 },
     mainHeading: { fontSize: 26, fontWeight: '800', marginBottom: 4, fontFamily: 'Georgia' },
     subTextDescription: { fontSize: 14, marginBottom: 16, lineHeight: 18 },
     launchSheetButton: { paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginBottom: 24 },
-    launchButtonText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
-    sectionTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#666', marginBottom: 12, marginTop: 4, textTransform: 'uppercase' },
+    launchButtonText: { color: theme.accentText, fontWeight: '700', fontSize: 15 },
+    sectionTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: theme.subtext, marginBottom: 12, marginTop: 4, textTransform: 'uppercase' },
     emptyContainer: { padding: 32, alignItems: 'center', justifyContent: 'center' },
     emptyText: { fontSize: 14, fontStyle: 'italic', textAlign: 'center' },
 
@@ -663,17 +672,17 @@ const styles = StyleSheet.create({
     backButtonText: { fontSize: 15, fontWeight: '700', marginLeft: 4 },
     classHeroCard: { borderWidth: 1, padding: 16, borderRadius: 18, marginBottom: 20 },
     heroClassName: { fontSize: 22, fontWeight: '800', fontFamily: 'Georgia', marginBottom: 4 },
-    heroJoinCodeLabel: { fontSize: 13, color: '#666', fontWeight: '600', letterSpacing: 0.5 },
+    heroJoinCodeLabel: { fontSize: 13, color: theme.subtext, fontWeight: '600', letterSpacing: 0.5 },
     divider: { height: 1, marginVertical: 16 },
     toggleSettingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     toggleSettingTitle: { fontSize: 15, fontWeight: '700' },
-    toggleSettingSub: { fontSize: 12, color: '#666', marginTop: 3, lineHeight: 16 },
+    toggleSettingSub: { fontSize: 12, color: theme.subtext, marginTop: 3, lineHeight: 16 },
 
     rosterCardRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, padding: 14, borderRadius: 12, marginBottom: 8 },
     rosterRealName: { fontSize: 15, fontWeight: '700' },
     rosterNickname: { fontSize: 12, marginTop: 2 },
     rosterMilesValue: { fontSize: 18, fontWeight: '800', fontFamily: 'Georgia' },
-    rosterMilesUnit: { fontSize: 11, color: '#666', fontWeight: '600', marginTop: 1 },
+    rosterMilesUnit: { fontSize: 11, color: theme.subtext, fontWeight: '600', marginTop: 1 },
     removeCircleButton: { padding: 4, marginLeft: 4 },
 
     // Sheet Styles
@@ -682,13 +691,13 @@ const styles = StyleSheet.create({
     sheetHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     sheetTitle: { fontFamily: 'Georgia', fontSize: 22, fontWeight: '700' },
     sheetDivider: { height: 1, marginVertical: 14 },
-    label: { fontSize: 11, fontWeight: '700', color: '#666', letterSpacing: 1, marginBottom: 6, marginTop: 10 },
+    label: { fontSize: 11, fontWeight: '700', color: theme.subtext, letterSpacing: 1, marginBottom: 6, marginTop: 10 },
     input: { borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15 },
-    helperText: { fontSize: 12, color: '#666', marginTop: 4, lineHeight: 16 },
+    helperText: { fontSize: 12, color: theme.subtext, marginTop: 4, lineHeight: 16 },
     sheetActions: { flexDirection: 'row', gap: 10, marginTop: 24 },
     actionButton: { flex: 1, borderRadius: 12, paddingVertical: 14, alignItems: 'center', justifyContent: 'center' },
     cancelButton: { borderWidth: 1 },
     saveButton: {},
     cancelText: { fontWeight: '600', fontSize: 15 },
-    saveText: { color: '#FFF', fontWeight: '700', fontSize: 15 }
+    saveText: { color: theme.accentText, fontWeight: '700', fontSize: 15 }
 });

@@ -18,12 +18,12 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 
 // Core React Native UI building blocks used on this screen.
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, useColorScheme } from 'react-native';
 
 // Shared color palette. Note the "../../" — two levels up, since this file
 // is nested inside app/(okage-tabs)/, so it needs to climb out of both
 // that folder and app/ to reach commonStyles.ts at the project root.
-import { colors } from '../../commonStyles';
+import { colors, Theme } from '../../commonStyles';
 
 // Supabase client, same relative-path reasoning as above.
 import { supabase } from '../../utils/supabase';
@@ -81,7 +81,9 @@ const QUICK_LINKS: QuickLink[] = [
 ];
 
 export default function OkageDashboard() {
-    const theme = colors.light;
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
+    const styles = getStyles(theme);
     const router = useRouter();
 
     // Shown in the "Welcome, ___" heading. Defaults to a generic label
@@ -149,7 +151,7 @@ export default function OkageDashboard() {
                 <Text style={[styles.kicker, { color: theme.accent }]}>OKAGE CONTENT TEAM</Text>
                 {/* Template literal-style embedding: {displayName} inserts
                     the current state value directly into the text. */}
-                <Text style={[styles.mainHeading, { color: theme.text }]}>Welcome, {displayName}</Text>
+                <Text style={[styles.mainHeading, { color: theme.text }]} accessibilityRole="header">Welcome, {displayName}</Text>
                 <Text style={[styles.introText, { color: theme.subtext }]}>
                     Use these tools to keep trail content, lesson guides, and quiz questions up to date across the app.
                     Nothing here shows individual student information.
@@ -169,6 +171,9 @@ export default function OkageDashboard() {
                         // sidesteps a TypeScript route-typing mismatch
                         // (same pattern seen in app/_layout.tsx).
                         onPress={() => router.push(link.path as any)}
+                        accessibilityRole="button"
+                        accessibilityLabel={link.title}
+                        accessibilityHint={link.description}
                     >
                         {/* A small circular badge behind the icon. */}
                         <View style={[styles.iconCircle, { backgroundColor: theme.background, borderColor: theme.border }]}>
@@ -192,7 +197,7 @@ export default function OkageDashboard() {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     kicker: { fontSize: 11, letterSpacing: 1.2, fontWeight: '800', marginBottom: 6 },
     mainHeading: { fontSize: 26, fontWeight: '800', marginBottom: 4, fontFamily: 'Georgia' },
@@ -213,6 +218,11 @@ const styles = StyleSheet.create({
         // (icon circle, text block, chevron) without needing manual
         // margins on each one individually.
         gap: 12,
+        shadowColor: theme.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 6,
+        elevation: 2,
     },
     iconCircle: {
         width: 40,

@@ -1,0 +1,7 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # Expo SDK 54 requires Node 20.19.4+
+  NODE_VERSION = "20"

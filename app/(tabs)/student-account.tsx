@@ -23,6 +23,7 @@ import {
     StyleSheet,
     Text,
     TextInput,
+    useColorScheme,
     View,
 } from 'react-native';
 import { colors, getGlobalStyles, type Theme } from '../../commonStyles';
@@ -31,6 +32,7 @@ import Button from '../../components/Button';
 import ModalBackdrop from '../../components/ModalBackdrop';
 import { signOutAndRedirect } from '../../lib/auth';
 import { confirmAlert } from '../../lib/confirmAlert';
+import { requestTourReplay } from '../../lib/onboarding';
 import { formatActivitySummary } from '../../lib/activityTypes';
 import { ensureProfileRow } from '../../lib/profiles';
 import { formatMiles } from '../../lib/trails';
@@ -266,7 +268,11 @@ function getAccountStyles(theme: Theme) {
             marginTop: 3,
         },
         deleteButton: {
-            backgroundColor: '#FF3B30',
+            // #D70015, not #FF3B30 -- the same "one error color" already
+            // used across the auth flow (login.tsx/signup.tsx). #FF3B30
+            // as a white-text fill measured 3.55:1, failing AA; #D70015
+            // measures 5.39:1 in the same role.
+            backgroundColor: '#D70015',
             borderRadius: 10,
             paddingHorizontal: 10,
             paddingVertical: 7,
@@ -396,7 +402,8 @@ function getAccountStyles(theme: Theme) {
 }
 
 export default function AccountScreen() {
-    const theme = colors.light;
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
     const baseStyles = getGlobalStyles(theme);
     const accountStyles = getAccountStyles(theme);
     const router = useRouter();
@@ -860,7 +867,7 @@ export default function AccountScreen() {
         <>
             <ScrollView style={{ flex: 1, backgroundColor: theme.background }} contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
                 <View style={baseStyles.profileImageContainer}>
-                    <Pressable style={baseStyles.avatarEditWrapper} onPress={() => setEditOpen(true)} hitSlop={8}>
+                    <Pressable style={baseStyles.avatarEditWrapper} onPress={() => setEditOpen(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Edit profile picture">
                         <View style={baseStyles.avatarRing}>
                             <Image source={{ uri: currentAvatarUrl }} style={baseStyles.profileImage} contentFit="contain" />
                         </View>
@@ -868,18 +875,42 @@ export default function AccountScreen() {
                             <Ionicons name="pencil" size={16} color="#FFF" />
                         </View>
                     </Pressable>
-                    <Text style={baseStyles.profileGreeting}>Welcome back, {resolvedGreetingName}</Text>
+                    <Text style={baseStyles.profileGreeting} accessibilityRole="header">Welcome back, {resolvedGreetingName}</Text>
                     <Text style={baseStyles.profileSubtext}>Manage your account profiles</Text>
                 </View>
 
                 <View style={baseStyles.AccountMain}>
                     <Button label="View All Activity Data" onPress={() => void openActivityData()} />
                     <Button label="Join & Manage Classes" onPress={() => void openGroupsPortal()} />
-                    <Button
-                        label="Sign Out"
+                    {/* Demoted from a full-width filled Button (identical
+                        size/shape to the two primary actions above,
+                        distinguished only by red fill) to a smaller
+                        outlined control, separated by extra top margin --
+                        it was one careless tap away from "Join & Manage
+                        Classes" with no other distinction (flagged in an
+                        /impeccable critique as a real accidental-tap risk
+                        for a K-12 audience). Color reused from the
+                        deleteButton fix above (#D70015, 4.72:1 as text on
+                        this cream background). */}
+                    <Pressable
+                        onPress={() => requestTourReplay('student')}
+                        style={{ alignSelf: 'center', marginTop: 28, paddingVertical: 13, paddingHorizontal: 18, borderRadius: 10, borderWidth: 1, borderColor: theme.accent }}
+                        accessibilityRole="button"
+                    >
+                        <Text style={{ color: theme.accent, fontWeight: '600', fontSize: 14 }}>Replay Tour</Text>
+                    </Pressable>
+
+                    <Pressable
                         onPress={() => void signOutAndRedirect(router)}
-                        style={{ backgroundColor: '#FF3B30', marginTop: 10 }}
-                    />
+                        // paddingVertical 10 measured 39px live, 5px under
+                        // the 44px touch-target floor -- caught in a later
+                        // /impeccable critique round after the original
+                        // demotion fix. 13 clears it.
+                        style={{ alignSelf: 'center', marginTop: 10, paddingVertical: 13, paddingHorizontal: 18, borderRadius: 10, borderWidth: 1, borderColor: theme.error }}
+                        accessibilityRole="button"
+                    >
+                        <Text style={{ color: theme.error, fontWeight: '600', fontSize: 14 }}>Sign Out</Text>
+                    </Pressable>
                 </View>
 
                 <Text style={baseStyles.acknowledgementText}>
@@ -901,7 +932,7 @@ export default function AccountScreen() {
 
                     <View style={accountStyles.sheet}>
                         <ScrollView contentContainerStyle={{ paddingBottom: 10 }} showsVerticalScrollIndicator={false}>
-                            <Text style={accountStyles.modalTitle}>Customize Profile</Text>
+                            <Text style={accountStyles.modalTitle} accessibilityRole="header">Customize Profile</Text>
                             <View style={accountStyles.modalDivider} />
 
                             <View style={accountStyles.previewImageContainer}>
@@ -911,15 +942,15 @@ export default function AccountScreen() {
                             </View>
 
                             <View style={accountStyles.arrowPickerContainer}>
-                                <Pressable style={accountStyles.arrowButton} onPress={handlePreviousSeed}>
+                                <Pressable style={accountStyles.arrowButton} onPress={handlePreviousSeed} accessibilityRole="button" accessibilityLabel="Previous look">
                                     <Text style={accountStyles.arrowButtonText}>‹</Text>
                                 </Pressable>
-                                <Pressable style={accountStyles.arrowButton} onPress={handleNextSeed}>
+                                <Pressable style={accountStyles.arrowButton} onPress={handleNextSeed} accessibilityRole="button" accessibilityLabel="Next look">
                                     <Text style={accountStyles.arrowButtonText}>›</Text>
                                 </Pressable>
                             </View>
 
-                            <Pressable style={[accountStyles.defaultResetButton, isUsingNicknameLook && accountStyles.defaultResetButtonActive]} onPress={handleResetToDefaultUsername}>
+                            <Pressable style={[accountStyles.defaultResetButton, isUsingNicknameLook && accountStyles.defaultResetButtonActive]} onPress={handleResetToDefaultUsername} accessibilityRole="button">
                                 <Text style={[accountStyles.defaultResetText, isUsingNicknameLook && accountStyles.defaultResetTextActive]}>
                                     {isUsingNicknameLook ? '✨ Matching Nickname Look Active' : '✨ Match Nickname Look'}
                                 </Text>
@@ -928,7 +959,7 @@ export default function AccountScreen() {
                             <Text style={accountStyles.label}>ART STYLE CATEGORY</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={accountStyles.scrollerWrapperContainer}>
                                 {ART_STYLES.map((s) => (
-                                    <Pressable key={s} style={[accountStyles.optionChip, chosenStyle === s && accountStyles.optionChipActive]} onPress={() => setChosenStyle(s)}>
+                                    <Pressable key={s} style={[accountStyles.optionChip, chosenStyle === s && accountStyles.optionChipActive]} onPress={() => setChosenStyle(s)} accessibilityRole="radio" accessibilityState={{ selected: chosenStyle === s }} aria-selected={chosenStyle === s}>
                                         <Text style={[accountStyles.optionChipText, chosenStyle === s && accountStyles.optionChipTextActive]}>{s}</Text>
                                     </Pressable>
                                 ))}
@@ -936,8 +967,8 @@ export default function AccountScreen() {
 
                             <Text style={accountStyles.label}>BACKGROUND THEME COLOR</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={accountStyles.scrollerWrapperContainer}>
-                                {BG_COLORS.map((color) => (
-                                    <Pressable key={color} style={[accountStyles.colorCircle, { backgroundColor: `#${color}` }, chosenBg === color && accountStyles.colorCircleSelected]} onPress={() => setChosenBg(color)} />
+                                {BG_COLORS.map((color, idx) => (
+                                    <Pressable key={color} style={[accountStyles.colorCircle, { backgroundColor: `#${color}` }, chosenBg === color && accountStyles.colorCircleSelected]} onPress={() => setChosenBg(color)} accessibilityRole="radio" accessibilityState={{ selected: chosenBg === color }} aria-selected={chosenBg === color} accessibilityLabel={`Background color ${idx + 1}`} />
                                 ))}
                             </ScrollView>
 
@@ -949,10 +980,10 @@ export default function AccountScreen() {
                         </ScrollView>
 
                         <View style={accountStyles.modalActions}>
-                            <Pressable style={[accountStyles.actionButton, accountStyles.cancelButton]} onPress={() => setEditOpen(false)}>
+                            <Pressable style={[accountStyles.actionButton, accountStyles.cancelButton]} onPress={() => setEditOpen(false)} accessibilityRole="button">
                                 <Text style={accountStyles.cancelText}>Cancel</Text>
                             </Pressable>
-                            <Pressable style={[accountStyles.actionButton, accountStyles.saveButton]} onPress={() => void saveProfileChanges()}>
+                            <Pressable style={[accountStyles.actionButton, accountStyles.saveButton]} onPress={() => void saveProfileChanges()} accessibilityRole="button">
                                 {savingUsername ? <ActivityIndicator color="#fff" size="small" /> : <Text style={accountStyles.saveText}>Save Changes</Text>}
                             </Pressable>
                         </View>
@@ -969,7 +1000,7 @@ export default function AccountScreen() {
                 <ModalBackdrop style={accountStyles.overlay}>
                     <Pressable style={accountStyles.dismissDismissibleBackdrop} onPress={() => setActivityOpen(false)} />
                     <View style={accountStyles.sheet}>
-                        <Text style={accountStyles.modalTitle}>All Activity Data</Text>
+                        <Text style={accountStyles.modalTitle} accessibilityRole="header">All Activity Data</Text>
                         <View style={accountStyles.modalDivider} />
 
                         <View style={accountStyles.summaryRow}>
@@ -1002,7 +1033,7 @@ export default function AccountScreen() {
                                                 triggering a second delete
                                                 request before the first
                                                 one finishes. */}
-                                            <Pressable style={[accountStyles.deleteButton, deletingLogId === row.id && accountStyles.deleteButtonDisabled]} onPress={() => confirmDeleteActivityRow(row)} disabled={deletingLogId !== null}>
+                                            <Pressable style={[accountStyles.deleteButton, deletingLogId === row.id && accountStyles.deleteButtonDisabled]} onPress={() => confirmDeleteActivityRow(row)} disabled={deletingLogId !== null} accessibilityRole="button" accessibilityLabel={`Delete ${formatMiles(row.miles)} miles from ${row.trailName}`}>
                                                 <Text style={accountStyles.deleteText}>{deletingLogId === row.id ? 'Deleting' : 'Delete'}</Text>
                                             </Pressable>
                                         </View>
@@ -1017,10 +1048,10 @@ export default function AccountScreen() {
                         )}
 
                         <View style={accountStyles.modalActions}>
-                            <Pressable style={[accountStyles.actionButton, accountStyles.cancelButton]} onPress={() => setActivityOpen(false)}>
+                            <Pressable style={[accountStyles.actionButton, accountStyles.cancelButton]} onPress={() => setActivityOpen(false)} accessibilityRole="button">
                                 <Text style={accountStyles.cancelText}>Close</Text>
                             </Pressable>
-                            <Pressable style={[accountStyles.actionButton, accountStyles.saveButton]} onPress={() => { void fetchActivityRows(); }} disabled={activityLoading}>
+                            <Pressable style={[accountStyles.actionButton, accountStyles.saveButton]} onPress={() => { void fetchActivityRows(); }} disabled={activityLoading} accessibilityRole="button">
                                 {activityLoading ? <ActivityIndicator color="#fff" size="small" /> : <Text style={accountStyles.saveText}>Refresh</Text>}
                             </Pressable>
                         </View>
@@ -1033,13 +1064,19 @@ export default function AccountScreen() {
                 <ModalBackdrop style={accountStyles.overlay}>
                     <Pressable style={accountStyles.dismissDismissibleBackdrop} onPress={() => setGroupsOpen(false)} />
                     <View style={accountStyles.sheet}>
-                        <Text style={accountStyles.modalTitle}>Join & Manage Groups</Text>
+                        <Text style={accountStyles.modalTitle} accessibilityRole="header">Join & Manage Classes</Text>
                         <View style={accountStyles.modalDivider} />
 
                         <Text style={accountStyles.label}>ENTER CLASS OR SCOUT CODE</Text>
                         <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16, alignItems: 'center' }}>
-                            <TextInput value={newGroupCode} onChangeText={setNewGroupCode} autoCapitalize="characters" placeholder="e.g. 73069-ALCOTT-GYM" placeholderTextColor={theme.subtext} style={[accountStyles.input, { flex: 1 }]} />
-                            <Pressable onPress={() => void joinNewGroupAction()} style={[accountStyles.actionButton, accountStyles.saveButton, { flex: 0, minWidth: 96, paddingHorizontal: 28, height: 56, borderRadius: 14 }]}>
+                            {/* Placeholder previously showed a format
+                                ("73069-ALCOTT-GYM") that doesn't match what
+                                the app actually generates (a plain 6-character
+                                code like "76H2D7", confirmed live) --
+                                misleading example for a student who has a
+                                real code in hand and isn't sure what to type. */}
+                            <TextInput value={newGroupCode} onChangeText={setNewGroupCode} autoCapitalize="characters" placeholder="e.g. 76H2D7" placeholderTextColor={theme.subtext} style={[accountStyles.input, { flex: 1 }]} />
+                            <Pressable onPress={() => void joinNewGroupAction()} style={[accountStyles.actionButton, accountStyles.saveButton, { flex: 0, minWidth: 96, paddingHorizontal: 28, height: 56, borderRadius: 14 }]} accessibilityRole="button">
                                 {joiningGroup ? <ActivityIndicator color="#fff" /> : <Text style={[accountStyles.saveText, { fontSize: 17 }]}>Join</Text>}
                             </Pressable>
                         </View>
@@ -1056,7 +1093,7 @@ export default function AccountScreen() {
                                                     {item.classId} {item.isAnonymousRequired ? '(🔒 Anonymous Enforced)' : ''}
                                                 </Text>
                                             </View>
-                                            <Pressable style={[accountStyles.deleteButton, { minWidth: 70 }]} onPress={() => void leaveGroupAction(item.id, item.className)}>
+                                            <Pressable style={[accountStyles.deleteButton, { minWidth: 70 }]} onPress={() => void leaveGroupAction(item.id, item.className)} accessibilityRole="button" accessibilityLabel={`Leave ${item.className}`}>
                                                 <Text style={accountStyles.deleteText}>Leave</Text>
                                             </Pressable>
                                         </View>
@@ -1066,7 +1103,7 @@ export default function AccountScreen() {
                         )}
 
                         <View style={accountStyles.modalActions}>
-                            <Pressable style={[accountStyles.actionButton, accountStyles.cancelButton]} onPress={() => setGroupsOpen(false)}>
+                            <Pressable style={[accountStyles.actionButton, accountStyles.cancelButton]} onPress={() => setGroupsOpen(false)} accessibilityRole="button">
                                 <Text style={accountStyles.cancelText}>Close</Text>
                             </Pressable>
                         </View>

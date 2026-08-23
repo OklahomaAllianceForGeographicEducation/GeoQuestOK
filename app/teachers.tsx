@@ -1,13 +1,5 @@
 // app/teachers.tsx
-// "For Teachers" info page on the public marketing site — reached from the
-// nav/footer "For Teachers" link on app/index.web.tsx. Unlike index.web.tsx,
-// this route has no competing native screen to protect, so it's a plain
-// .tsx rather than a .web.tsx split (Expo Router's static web export
-// requires a non-platform-specific fallback file for any route that isn't
-// the root "/", so splitting it the same way as index.web.tsx would need
-// an unused app/teachers.tsx anyway). Nothing in the native tab
-// navigators links here, so a native user never encounters it in practice.
-//
+
 // EDITING THIS PAGE: the FAQ_ITEMS and RESOURCE_LINKS arrays below are the
 // two things most likely to change over time — edit the text in those
 // arrays directly, no JSX/layout knowledge needed. Everything else follows
@@ -23,6 +15,7 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    useColorScheme,
     useWindowDimensions,
     View,
 } from 'react-native';
@@ -37,25 +30,25 @@ const CLASSROOM_FEATURES = [
         id: 'classes',
         icon: 'people-outline',
         title: 'Classroom Management',
-        body: 'Create classes, manage rosters, and toggle student anonymity — all from one teacher dashboard.',
+        body: 'Use the teacher dashboard to create classes and manage rosters.',
     },
     {
         id: 'curriculum',
         icon: 'library-outline',
         title: 'Curriculum & Standards',
-        body: 'Every trail comes with a cross-curricular lesson guide aligned to Oklahoma State Department of Education standards.',
+        body: 'Each trail comes with cross-curricular lessons aligned to Oklahoma State Department of Education standards.',
     },
     {
         id: 'quizzes',
         icon: 'help-circle-outline',
         title: 'Built-In Quizzes',
-        body: "Assign a trail's quiz questions to your class and track results as students complete them.",
+        body: "Assign standards aligned quizzes to track your students learning.",
     },
     {
         id: 'reports',
         icon: 'bar-chart-outline',
         title: 'Reporting & Grades',
-        body: 'Per-student quiz grades, fitness results, and activity logs — plus school and district-wide totals, exportable to PDF.',
+        body: 'Monitor and export student grades, fitness results, and activity logs.',
     },
 ];
 
@@ -63,17 +56,17 @@ const GETTING_STARTED_STEPS = [
     {
         id: 'signup',
         title: 'Sign Up as an Educator',
-        body: 'Choose K-12 teacher, school administrator, youth/scout leader, or higher-ed instructor at signup — each gets a tailored setup.',
+        body: 'Choose K-12 teacher, school administrator, youth/scout leader, or higher-ed instructor at signup for a targeted experience. Make sure to add your school name to be included in district reporting.',
     },
     {
         id: 'class',
         title: 'Create Your First Class',
-        body: 'Build a roster in minutes and share it with your students to join.',
+        body: 'Create a class and share it with your students to join.',
     },
     {
         id: 'trail',
         title: 'Assign a Trail & Track Progress',
-        body: 'Pick from twelve trails, assign it to your class, and watch the reports roll in.',
+        body: 'Pick a trail, then assign quizzes. Everything else is automatically graded within the app.',
     },
 ];
 
@@ -122,13 +115,15 @@ const FAQ_ITEMS = [
 // EDIT THESE: add more resource links as they come up — same shape,
 // { label, url }.
 const RESOURCE_LINKS = [
-    { id: 'okage', label: 'OKAGE — Oklahoma Alliance for Geographic Education', url: 'https://okageweb.org/' },
+    { id: 'okage', label: 'Oklahoma Alliance for Geographic Education', url: 'https://okageweb.org/' },
     { id: 'osde', label: 'Oklahoma State Department of Education', url: 'https://oklahoma.gov/education.html' },
 ];
 
 export default function TeachersInfoPage() {
     const router = useRouter();
     const { width: windowWidth } = useWindowDimensions();
+    const scheme = useColorScheme() ?? 'light';
+    const theme = BRAND[scheme];
     const isWide = windowWidth >= 900;
     const [openFaqId, setOpenFaqId] = useState<string | null>(FAQ_ITEMS[0]?.id ?? null);
 
@@ -137,23 +132,32 @@ export default function TeachersInfoPage() {
     };
 
     return (
-        <ScrollView style={styles.root} contentContainerStyle={styles.rootContent} showsVerticalScrollIndicator={false}>
+        <ScrollView style={[styles.root, { backgroundColor: theme.surfaceBase }]} contentContainerStyle={styles.rootContent} showsVerticalScrollIndicator={false}>
 
             <WebNav active="teachers" />
 
             {/* ── HERO ────────────────────────────────────────────── */}
-            <View style={[styles.hero, { backgroundColor: BRAND.ctaBg }]}>
+            <View style={[styles.hero, { backgroundColor: theme.ctaBg }]}>
                 <View style={styles.heroInner}>
-                    <Text style={styles.heroKicker}>FOR TEACHERS &amp; YOUTH LEADERS</Text>
-                    <Text style={[styles.heroTitle, { fontSize: isWide ? 52 : 34 }]}>Bring Walk Across{'\n'}Oklahoma to your classroom.</Text>
+                    {/* This page's one h1, matching the same fix and
+                        rationale as app/index.web.tsx -- a site-wide gap,
+                        not specific to the homepage. */}
+                    <Text style={[styles.heroTitle, { fontSize: isWide ? 52 : 34 }]} accessibilityRole="header" aria-level={1}>Bring GeoQuestOK to your classroom</Text>
                     <Text style={[styles.heroSubtitle, { fontSize: isWide ? 18 : 15.5 }]}>
-                        Free, standards-aligned, and built for K-12 classrooms across Oklahoma — with rosters, curriculum, quizzes, and grading in one place.
+                        Free, standards-aligned, and built for K-12 classrooms across Oklahoma.
                     </Text>
                     <View style={[styles.heroActions, isWide && { flexDirection: 'row' }]}>
-                        <Pressable onPress={() => router.push('/signup')} style={styles.heroPrimaryBtn}>
-                            <Text style={styles.heroPrimaryBtnText}>Sign Up as an Educator</Text>
+                        {/* Same primary-button pattern as index.web.tsx:
+                            near-black in light mode, bright accent + dark
+                            text in dark mode so it doesn't fade into an
+                            already-dark hero band. Previously this button
+                            used the orange heroBg fill regardless of scheme
+                            -- an inconsistency with the homepage's button
+                            that this pass also resolves. */}
+                        <Pressable onPress={() => router.push('/signup')} style={[styles.heroPrimaryBtn, scheme === 'dark' && { backgroundColor: theme.heroAccent }]} accessibilityRole="link">
+                            <Text style={[styles.heroPrimaryBtnText, scheme === 'dark' && { color: BRAND.light.darkBand }]}>Sign Up as an Educator</Text>
                         </Pressable>
-                        <Pressable onPress={() => router.push('/login')} style={styles.heroSecondaryBtn}>
+                        <Pressable onPress={() => router.push('/login')} style={styles.heroSecondaryBtn} accessibilityRole="link">
                             <Text style={styles.heroSecondaryBtnText}>Already Have an Account? Log In</Text>
                         </Pressable>
                     </View>
@@ -161,19 +165,18 @@ export default function TeachersInfoPage() {
             </View>
 
             {/* ── CLASSROOM FEATURES ──────────────────────────────── */}
-            <View style={[styles.section, { backgroundColor: BRAND.white }]}>
+            <View style={[styles.section, { backgroundColor: theme.surfaceBase }]}>
                 <View style={styles.sectionInner}>
-                    <Text style={styles.sectionKicker}>WHAT YOU GET</Text>
-                    <Text style={[styles.sectionHeading, { fontSize: isWide ? 32 : 25 }]}>Everything a classroom needs, built in.</Text>
+                    <Text style={[styles.sectionHeading, { color: theme.ink, fontSize: isWide ? 32 : 25 }]} accessibilityRole="header" aria-level={2}>Built with everything you need</Text>
 
                     <View style={[styles.featureGrid, isWide && styles.featureGridWide]}>
                         {CLASSROOM_FEATURES.map((feature) => (
-                            <View key={feature.id} style={[styles.featureCard, isWide && styles.featureCardWide]}>
-                                <View style={styles.featureIconBadge}>
-                                    <Ionicons name={feature.icon as any} size={26} color={BRAND.ctaBg} />
+                            <View key={feature.id} style={[styles.featureCard, isWide && styles.featureCardWide, { backgroundColor: theme.surfaceRaised, borderColor: theme.border }]}>
+                                <View style={[styles.featureIconBadge, scheme === 'dark' && { backgroundColor: theme.border }]}>
+                                    <Ionicons name={feature.icon as any} size={26} color={theme.pineAccent} />
                                 </View>
-                                <Text style={styles.featureTitle}>{feature.title}</Text>
-                                <Text style={styles.featureBody}>{feature.body}</Text>
+                                <Text style={[styles.featureTitle, { color: theme.ink }]}>{feature.title}</Text>
+                                <Text style={[styles.featureBody, { color: theme.body }]}>{feature.body}</Text>
                             </View>
                         ))}
                     </View>
@@ -181,10 +184,9 @@ export default function TeachersInfoPage() {
             </View>
 
             {/* ── GETTING STARTED ─────────────────────────────────── */}
-            <View style={[styles.section, { backgroundColor: BRAND.cream }]}>
+            <View style={[styles.section, { backgroundColor: theme.surfaceRaised }]}>
                 <View style={styles.sectionInner}>
-                    <Text style={styles.sectionKicker}>GETTING STARTED</Text>
-                    <Text style={[styles.sectionHeading, { fontSize: isWide ? 32 : 25 }]}>Up and running in three steps.</Text>
+                    <Text style={[styles.sectionHeading, { color: theme.ink, fontSize: isWide ? 32 : 25 }]} accessibilityRole="header" aria-level={2}>Set up is as easy as 1 2 3</Text>
 
                     <View style={[styles.stepsList, isWide && styles.stepsListWide]}>
                         {GETTING_STARTED_STEPS.map((step, index) => (
@@ -193,8 +195,8 @@ export default function TeachersInfoPage() {
                                     <Text style={styles.stepNumberText}>{index + 1}</Text>
                                 </View>
                                 <View style={styles.stepTextBlock}>
-                                    <Text style={styles.stepTitle}>{step.title}</Text>
-                                    <Text style={styles.stepBody}>{step.body}</Text>
+                                    <Text style={[styles.stepTitle, { color: theme.ink }]}>{step.title}</Text>
+                                    <Text style={[styles.stepBody, { color: theme.body }]}>{step.body}</Text>
                                 </View>
                             </View>
                         ))}
@@ -203,33 +205,34 @@ export default function TeachersInfoPage() {
             </View>
 
             {/* ── FAQ ─────────────────────────────────────────────── */}
-            <View style={[styles.section, { backgroundColor: BRAND.white }]}>
+            <View style={[styles.section, { backgroundColor: theme.surfaceBase }]}>
                 <View style={styles.sectionInner}>
-                    <Text style={styles.sectionKicker}>FAQ</Text>
-                    <Text style={[styles.sectionHeading, { fontSize: isWide ? 32 : 25 }]}>Common questions from educators.</Text>
+                    <Text style={[styles.sectionHeading, { color: theme.ink, fontSize: isWide ? 32 : 25 }]} accessibilityRole="header" aria-level={2}>Questions? We have answers!</Text>
 
-                    <View style={styles.faqList}>
+                    <View style={[styles.faqList, { borderTopColor: theme.border }]}>
                         {FAQ_ITEMS.map((item) => {
                             const isOpen = openFaqId === item.id;
                             return (
-                                <View key={item.id} style={styles.faqRow}>
+                                <View key={item.id} style={[styles.faqRow, { borderBottomColor: theme.border }]}>
                                     <Pressable
                                         onPress={() => setOpenFaqId(isOpen ? null : item.id)}
                                         style={styles.faqQuestionRow}
+                                        accessibilityRole="button"
+                                        aria-expanded={isOpen}
                                     >
-                                        <Text style={styles.faqQuestionText}>{item.question}</Text>
+                                        <Text style={[styles.faqQuestionText, { color: theme.ink }]}>{item.question}</Text>
                                         <Ionicons
                                             name={isOpen ? 'remove' : 'add'}
                                             size={20}
-                                            color={BRAND.ctaBg}
+                                            color={theme.pineAccent}
                                         />
                                     </Pressable>
                                     {isOpen && (
                                         <View style={styles.faqAnswerBlock}>
-                                            <Text style={styles.faqAnswerText}>{item.answer}</Text>
+                                            <Text style={[styles.faqAnswerText, { color: theme.body }]}>{item.answer}</Text>
                                             {item.linkUrl && (
-                                                <Pressable onPress={() => openExternalLink(item.linkUrl)}>
-                                                    <Text style={styles.faqAnswerLink}>{item.linkLabel} →</Text>
+                                                <Pressable onPress={() => openExternalLink(item.linkUrl)} accessibilityRole="link">
+                                                    <Text style={[styles.faqAnswerLink, { color: theme.pineAccent }]}>{item.linkLabel} →</Text>
                                                 </Pressable>
                                             )}
                                         </View>
@@ -242,10 +245,9 @@ export default function TeachersInfoPage() {
             </View>
 
             {/* ── ADDITIONAL RESOURCES ────────────────────────────── */}
-            <View style={[styles.section, { backgroundColor: BRAND.cream }]}>
+            <View style={[styles.section, { backgroundColor: theme.surfaceRaised }]}>
                 <View style={styles.sectionInner}>
-                    <Text style={styles.sectionKicker}>ADDITIONAL RESOURCES</Text>
-                    <Text style={[styles.sectionHeading, { fontSize: isWide ? 32 : 25, marginBottom: 20 }]}>Learn more beyond the app.</Text>
+                    <Text style={[styles.sectionHeading, { color: theme.ink, fontSize: isWide ? 32 : 25, marginBottom: 20 }]} accessibilityRole="header" aria-level={2}>Learn more beyond the app.</Text>
 
                     <View style={styles.resourceList}>
                         {RESOURCE_LINKS.map((resource) => (
@@ -253,9 +255,10 @@ export default function TeachersInfoPage() {
                                 key={resource.id}
                                 onPress={() => openExternalLink(resource.url)}
                                 style={({ pressed }) => [styles.resourceRow, pressed && { opacity: 0.7 }]}
+                                accessibilityRole="link"
                             >
-                                <Ionicons name="open-outline" size={18} color={BRAND.ctaBg} />
-                                <Text style={styles.resourceLabel}>{resource.label}</Text>
+                                <Ionicons name="open-outline" size={18} color={theme.pineAccent} />
+                                <Text style={[styles.resourceLabel, { color: theme.ink }]}>{resource.label}</Text>
                             </Pressable>
                         ))}
                     </View>
@@ -263,9 +266,9 @@ export default function TeachersInfoPage() {
             </View>
 
             {/* ── FINAL CTA BAND ──────────────────────────────────── */}
-            <View style={[styles.ctaBand, { backgroundColor: BRAND.heroBg }]}>
-                <Text style={[styles.ctaHeading, { fontSize: isWide ? 34 : 24 }]}>Ready to bring GeoQuestOK to your classroom?</Text>
-                <Pressable onPress={() => router.push('/signup')} style={styles.ctaButton}>
+            <View style={[styles.ctaBand, { backgroundColor: theme.heroBg }]}>
+                <Text style={[styles.ctaHeading, { fontSize: isWide ? 34 : 24 }]} accessibilityRole="header" aria-level={2}>Ready to bring GeoQuestOK to your classroom?</Text>
+                <Pressable onPress={() => router.push('/signup')} style={styles.ctaButton} accessibilityRole="link">
                     <Text style={styles.ctaButtonText}>Sign Up as an Educator</Text>
                 </Pressable>
             </View>
@@ -276,17 +279,19 @@ export default function TeachersInfoPage() {
 }
 
 const styles = StyleSheet.create({
-    root: { flex: 1, backgroundColor: BRAND.white },
+    root: { flex: 1 },
     rootContent: { flexGrow: 1 },
 
     // HERO
     hero: { width: '100%', paddingVertical: 64, paddingHorizontal: 24 },
-    heroInner: { width: '100%', maxWidth: 800, alignSelf: 'center', alignItems: 'flex-start' },
-    heroKicker: { color: '#D7EBE4', fontSize: 12, fontWeight: '800', letterSpacing: 1.4, marginBottom: 14 },
+    // maxWidth matches sectionInner below (and the homepage hero) so the
+    // headline's left edge lines up with every other section on the page
+    // instead of sitting in its own narrower, more-centered column.
+    heroInner: { width: '100%', maxWidth: 1160, alignSelf: 'center', alignItems: 'flex-start' },
     heroTitle: { fontFamily: 'Georgia', fontWeight: '800', color: '#FFFFFF', marginBottom: 18 },
-    heroSubtitle: { color: '#E4F0EC', lineHeight: 26, marginBottom: 28, maxWidth: 560 },
+    heroSubtitle: { color: '#E4F0EC', lineHeight: 26, marginBottom: 28, maxWidth: 660 },
     heroActions: { flexDirection: 'column', gap: 14 },
-    heroPrimaryBtn: { backgroundColor: BRAND.heroBg, paddingVertical: 16, paddingHorizontal: 26, borderRadius: 12, alignItems: 'center' },
+    heroPrimaryBtn: { backgroundColor: '#241E18', paddingVertical: 16, paddingHorizontal: 26, borderRadius: 12, alignItems: 'center' },
     heroPrimaryBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 15 },
     heroSecondaryBtn: { backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.55)', paddingVertical: 16, paddingHorizontal: 26, borderRadius: 12, alignItems: 'center' },
     heroSecondaryBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
@@ -294,8 +299,7 @@ const styles = StyleSheet.create({
     // SECTION SHELL
     section: { width: '100%', paddingVertical: 64, paddingHorizontal: 24 },
     sectionInner: { width: '100%', maxWidth: 1000, alignSelf: 'center', alignItems: 'flex-start' },
-    sectionKicker: { fontSize: 12, fontWeight: '800', letterSpacing: 1.4, color: BRAND.ctaBg, marginBottom: 10 },
-    sectionHeading: { fontFamily: 'Georgia', fontWeight: '800', color: BRAND.ink, marginBottom: 32 },
+    sectionHeading: { fontFamily: 'Georgia', fontWeight: '800', marginBottom: 32 },
 
     // CLASSROOM FEATURES
     featureGrid: { width: '100%', gap: 18 },
@@ -303,11 +307,9 @@ const styles = StyleSheet.create({
     featureCard: {
         flex: 1,
         minWidth: 220,
-        backgroundColor: BRAND.cream,
         borderRadius: 20,
         padding: 26,
         borderWidth: 1,
-        borderColor: BRAND.border,
     },
     featureCardWide: { flexBasis: '46%' },
     featureIconBadge: {
@@ -319,45 +321,53 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         marginBottom: 16,
     },
-    featureTitle: { fontFamily: 'Georgia', fontWeight: '800', fontSize: 18, color: BRAND.ink, marginBottom: 8 },
-    featureBody: { fontSize: 14, lineHeight: 21, color: '#5A5147' },
+    featureTitle: { fontFamily: 'Georgia', fontWeight: '800', fontSize: 18, marginBottom: 8 },
+    featureBody: { fontSize: 14, lineHeight: 21 },
 
     // GETTING STARTED
     stepsList: { width: '100%', gap: 24 },
     stepsListWide: { flexDirection: 'row', gap: 32 },
     stepRow: { flexDirection: 'row', gap: 16, alignItems: 'flex-start' },
     stepRowWide: { flex: 1, flexDirection: 'column', gap: 14 },
+    // Pinned to BRAND.light.ctaBg rather than theme.ctaBg -- this is a
+    // small solid-fill badge with white text on top, not a section
+    // background, and the light-mode pine already gives that white text
+    // 7.6:1 regardless of what's behind the badge, so it doesn't need (or
+    // benefit from) switching with scheme the way the section fills do.
     stepNumberBadge: {
         width: 36,
         height: 36,
         borderRadius: 18,
-        backgroundColor: BRAND.ctaBg,
+        backgroundColor: BRAND.light.ctaBg,
         alignItems: 'center',
         justifyContent: 'center',
         flexShrink: 0,
     },
     stepNumberText: { color: '#FFFFFF', fontWeight: '800', fontSize: 15 },
     stepTextBlock: { flex: 1 },
-    stepTitle: { fontFamily: 'Georgia', fontWeight: '800', fontSize: 16.5, color: BRAND.ink, marginBottom: 6 },
-    stepBody: { fontSize: 13.5, lineHeight: 20, color: '#5A5147' },
+    stepTitle: { fontFamily: 'Georgia', fontWeight: '800', fontSize: 16.5, marginBottom: 6 },
+    stepBody: { fontSize: 13.5, lineHeight: 20 },
 
     // FAQ
-    faqList: { width: '100%', borderTopWidth: 1, borderTopColor: BRAND.border },
-    faqRow: { borderBottomWidth: 1, borderBottomColor: BRAND.border, paddingVertical: 18 },
+    faqList: { width: '100%', borderTopWidth: 1 },
+    faqRow: { borderBottomWidth: 1, paddingVertical: 18 },
     faqQuestionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 16 },
-    faqQuestionText: { flex: 1, fontFamily: 'Georgia', fontWeight: '700', fontSize: 16, color: BRAND.ink },
+    faqQuestionText: { flex: 1, fontFamily: 'Georgia', fontWeight: '700', fontSize: 16 },
     faqAnswerBlock: { marginTop: 12, paddingRight: 32 },
-    faqAnswerText: { fontSize: 14.5, lineHeight: 22, color: '#5A5147' },
-    faqAnswerLink: { fontSize: 14, fontWeight: '700', color: BRAND.ctaBg, marginTop: 10 },
+    faqAnswerText: { fontSize: 14.5, lineHeight: 22 },
+    faqAnswerLink: { fontSize: 14, fontWeight: '700', marginTop: 10 },
 
     // RESOURCES
     resourceList: { width: '100%', gap: 4 },
     resourceRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
-    resourceLabel: { fontSize: 15, fontWeight: '600', color: BRAND.ink, textDecorationLine: 'underline' },
+    resourceLabel: { fontSize: 15, fontWeight: '600', textDecorationLine: 'underline' },
 
     // FINAL CTA
     ctaBand: { width: '100%', paddingVertical: 64, paddingHorizontal: 24, alignItems: 'center' },
     ctaHeading: { fontFamily: 'Georgia', fontWeight: '800', color: '#FFFFFF', marginBottom: 24, textAlign: 'center' },
     ctaButton: { backgroundColor: '#FFFFFF', paddingVertical: 16, paddingHorizontal: 30, borderRadius: 12 },
-    ctaButtonText: { color: BRAND.heroBg, fontWeight: '800', fontSize: 15 },
+    // Pinned to BRAND.light.pineAccent -- this pill is always white
+    // regardless of scheme, so its label is too (same reasoning as
+    // index.web.tsx's teacherBannerButtonText/ctaButtonText).
+    ctaButtonText: { color: BRAND.light.pineAccent, fontWeight: '800', fontSize: 15 },
 });

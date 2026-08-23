@@ -16,14 +16,16 @@ import {
     StyleSheet,
     Text,
     TextInput,
+    useColorScheme,
     View
 } from 'react-native';
-import { colors } from '../../commonStyles';
+import { colors, Theme } from '../../commonStyles';
 
 // Custom modal components (their own files under components/) for
 // entering a walking activity and a numeric exercise score, so this screen
 // doesn't need its own inline forms for those inputs.
 import ActivityLogModal from '../../components/ActivityLogModal';
+import TourTarget from '../../components/tour/TourTarget';
 
 // useBadgeUnlocks is a hook exposed by the app-wide BadgeUnlockProvider
 // (wrapped around the whole app in app/_layout.tsx), giving access to
@@ -102,7 +104,9 @@ const EXERCISE_OPTIONS: { key: ExerciseKey; label: string }[] = [
 ];
 
 export default function AdvancedStudentJournal() {
-    const theme = colors.light;
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
+    const styles = getStyles(theme);
     // Pull just the refresh function out of the badge-unlock context, so
     // this screen can trigger a badge check after successfully logging
     // an activity.
@@ -440,15 +444,21 @@ export default function AdvancedStudentJournal() {
                 <Pressable
                     style={[styles.profileBanner, { backgroundColor: theme.surface, borderColor: theme.border }]}
                     onPress={() => setShowProfileEditor(!showProfileEditor)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${age === 17 ? 'Age group 17+' : `Age group ${age} years old`}, ${group === 'BOYS' ? 'Boys' : 'Girls'}. Tap to change.`}
+                    // Paired with aria-expanded -- see the comment on
+                    // WebNav.tsx's hamburger toggle for why both are needed.
+                    accessibilityState={{ expanded: showProfileEditor }}
+                    aria-expanded={showProfileEditor}
                 >
                     <View style={{ flex: 1 }}>
-                        <Text style={styles.bannerKicker}>EVALUATION PROFILE LOGGED (TAP TO CHANGE)</Text>
+                        <Text style={styles.bannerKicker}>YOUR PROFILE (TAP TO CHANGE)</Text>
                         <Text style={[styles.bannerMainText, { color: theme.text }]}>
                             {/* Age 17 is treated as an open-ended "17+"
                                 bracket (matching how the benchmark table's
                                 oldest row works) rather than showing a
                                 literal "17 Years Old". */}
-                            {age === 17 ? "Class Tier: 17+" : `Age Group: ${age} Years Old`} · {group === 'BOYS' ? "Boys Bracket" : "Girls Bracket"}
+                            {age === 17 ? "Age Group: 17+" : `Age Group: ${age} Years Old`} · {group === 'BOYS' ? "Boys" : "Girls"}
                         </Text>
                     </View>
                     <Ionicons name={showProfileEditor ? "close-circle" : "create-outline"} size={22} color={theme.accent} />
@@ -457,7 +467,7 @@ export default function AdvancedStudentJournal() {
                 {/* EXPANDABLE IN-SCREEN SELECTOR FOR AGE AND GENDER COHORTS */}
                 {showProfileEditor && (
                     <View style={[styles.inlineEditorContainer, { backgroundColor: theme.surface, borderColor: theme.accent }]}>
-                        <Text style={styles.fieldTitle}>SELECT BRACKET GENDER</Text>
+                        <Text style={styles.fieldTitle}>CHOOSE YOUR GROUP</Text>
                         <View style={styles.genderRowContainer}>
                             <Pressable
                                 style={[styles.bracketSelectorButton, group === 'BOYS' ? { backgroundColor: theme.accent } : { backgroundColor: theme.background }]}
@@ -469,8 +479,11 @@ export default function AdvancedStudentJournal() {
                                     // away.
                                     void saveProfileUpdate(age, 'BOYS');
                                 }}
+                                accessibilityRole="radio"
+                                accessibilityState={{ selected: group === 'BOYS' }}
+                                aria-selected={group === 'BOYS'}
                             >
-                                <Text style={[styles.bracketButtonText, group === 'BOYS' ? { color: '#FFF' } : { color: theme.text }]}>BOYS BRACKET</Text>
+                                <Text style={[styles.bracketButtonText, group === 'BOYS' ? { color: '#FFF' } : { color: theme.text }]}>BOYS</Text>
                             </Pressable>
                             <Pressable
                                 style={[styles.bracketSelectorButton, group === 'GIRLS' ? { backgroundColor: theme.accent } : { backgroundColor: theme.background }]}
@@ -478,12 +491,15 @@ export default function AdvancedStudentJournal() {
                                     setGroup('GIRLS');
                                     void saveProfileUpdate(age, 'GIRLS');
                                 }}
+                                accessibilityRole="radio"
+                                accessibilityState={{ selected: group === 'GIRLS' }}
+                                aria-selected={group === 'GIRLS'}
                             >
-                                <Text style={[styles.bracketButtonText, group === 'GIRLS' ? { color: '#FFF' } : { color: theme.text }]}>GIRLS BRACKET</Text>
+                                <Text style={[styles.bracketButtonText, group === 'GIRLS' ? { color: '#FFF' } : { color: theme.text }]}>GIRLS</Text>
                             </Pressable>
                         </View>
 
-                        <Text style={[styles.fieldTitle, { marginTop: 12 }]}>SELECT STUDENT AGE ({age} YRS OLD)</Text>
+                        <Text style={[styles.fieldTitle, { marginTop: 12 }]}>YOUR AGE ({age} YRS OLD)</Text>
                         {/* A horizontally scrolling row of age pills, one
                             per age 6 through 17, written as a plain inline
                             array literal since it's only used here. */}
@@ -496,6 +512,10 @@ export default function AdvancedStudentJournal() {
                                         setAge(num);
                                         void saveProfileUpdate(num, group);
                                     }}
+                                    accessibilityRole="radio"
+                                    accessibilityState={{ selected: age === num }}
+                                    aria-selected={age === num}
+                                    accessibilityLabel={num === 17 ? '17 or older' : `${num} years old`}
                                 >
                                     <Text style={[styles.agePillText, age === num ? { color: '#FFF', fontWeight: '800' } : { color: theme.text }]}>
                                         {num === 17 ? '17+' : num}
@@ -508,8 +528,8 @@ export default function AdvancedStudentJournal() {
 
                 {/* Main Activity Card Form */}
                 <View style={[styles.journalSurface, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                    <Text style={[styles.surfaceTitle, { color: theme.text }]}>Daily Activity Portfolio</Text>
-                    <Text style={styles.surfaceSubtitle}>Log a walk, record an exercise if you have one, and add a note about your day.</Text>
+                    <Text style={[styles.surfaceTitle, { color: theme.text }]} accessibilityRole="header">Today&apos;s Trail Journal</Text>
+                    <Text style={styles.surfaceSubtitle}>Log a walk, add an exercise if you did one, and jot a note about your day.</Text>
 
                     {/* FIELD BLOCK 1: ACTIVITY MANAGEMENT */}
                     {/* Tapping this whole row toggles enableWalking, rather
@@ -519,62 +539,76 @@ export default function AdvancedStudentJournal() {
                     <Pressable
                         style={[styles.toggleSelectorRow, { borderColor: theme.border }]}
                         onPress={() => setEnableWalking(!enableWalking)}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: enableWalking }}
+                        aria-checked={enableWalking}
                     >
                         <View style={styles.rowTitleArea}>
-                            <Ionicons name="flame" size={18} color={enableWalking ? theme.accent : "#8E8E93"} />
-                            <Text style={[styles.toggleLabel, { color: theme.text }]}>Record Activity</Text>
+                            <Ionicons name="flame" size={18} color={enableWalking ? theme.accent : theme.subtext} />
+                            <Text style={[styles.toggleLabel, { color: theme.text }]}>Log a Walk</Text>
                         </View>
                         <Ionicons
                             name={enableWalking ? "checkbox" : "square-outline"}
                             size={22}
-                            color={enableWalking ? theme.accent : "#8E8E93"}
+                            color={enableWalking ? theme.accent : theme.subtext}
                         />
                     </Pressable>
 
                     {enableWalking && (
                         <View style={styles.inputBoxInterior}>
                             <Text style={styles.fieldTitle}>TRAIL MILES LOGGED</Text>
-                            <Pressable
-                                style={[styles.mileageLaunchButton, { backgroundColor: theme.background, borderColor: theme.border }]}
-                                onPress={() => setActivityModalOpen(true)}
-                            >
-                                <Text style={[styles.mileageLaunchButtonText, { color: theme.text }]}>
-                                    {/* If an activity has already been
-                                        logged this session, show a summary
-                                        of it right on the button (e.g.
-                                        "2.3 mi · 30 min walking") instead
-                                        of a generic prompt. */}
-                                    {activityLog
-                                        ? `${formatMilesShort(activityLog.miles)} mi · ${formatActivitySummary(activityLog.activityType, activityLog.amount, activityLog.unit)}`
-                                        : 'Log Activity'}
-                                </Text>
-                                <Ionicons name="create-outline" size={16} color={theme.subtext} />
-                            </Pressable>
+                            <TourTarget id="student.mileageButton">
+                                <Pressable
+                                    style={[styles.mileageLaunchButton, { backgroundColor: theme.background, borderColor: theme.border }]}
+                                    onPress={() => setActivityModalOpen(true)}
+                                    accessibilityRole="button"
+                                >
+                                    <Text style={[styles.mileageLaunchButtonText, { color: theme.text }]}>
+                                        {/* If an activity has already been
+                                            logged this session, show a summary
+                                            of it right on the button (e.g.
+                                            "2.3 mi · 30 min walking") instead
+                                            of a generic prompt. */}
+                                        {activityLog
+                                            ? `${formatMilesShort(activityLog.miles)} mi · ${formatActivitySummary(activityLog.activityType, activityLog.amount, activityLog.unit)}`
+                                            : 'Log Activity'}
+                                    </Text>
+                                    <Ionicons name="create-outline" size={16} color={theme.subtext} />
+                                </Pressable>
+                            </TourTarget>
                         </View>
                     )}
 
                     {/* FIELD BLOCK 2: PRESIDENTIAL EXERCISES */}
-                    <Pressable
-                        style={[styles.toggleSelectorRow, { borderColor: theme.border, marginTop: 14 }]}
-                        onPress={() => setEnableExercise(!enableExercise)}
-                    >
-                        <View style={styles.rowTitleArea}>
-                            <Ionicons name="fitness" size={18} color={enableExercise ? theme.accent : "#8E8E93"} />
-                            <Text style={[styles.toggleLabel, { color: theme.text }]}>Record Challenge Exercise</Text>
-                        </View>
-                        <Ionicons
-                            name={enableExercise ? "checkbox" : "square-outline"}
-                            size={22}
-                            color={enableExercise ? theme.accent : "#8E8E93"}
-                        />
-                    </Pressable>
+                    <TourTarget id="student.exerciseToggle">
+                        <Pressable
+                            style={[styles.toggleSelectorRow, { borderColor: theme.border, marginTop: 14 }]}
+                            onPress={() => setEnableExercise(!enableExercise)}
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: enableExercise }}
+                            aria-checked={enableExercise}
+                        >
+                            <View style={styles.rowTitleArea}>
+                                <Ionicons name="fitness" size={18} color={enableExercise ? theme.accent : theme.subtext} />
+                                <Text style={[styles.toggleLabel, { color: theme.text }]}>Log a Challenge Exercise</Text>
+                            </View>
+                            <Ionicons
+                                name={enableExercise ? "checkbox" : "square-outline"}
+                                size={22}
+                                color={enableExercise ? theme.accent : theme.subtext}
+                            />
+                        </Pressable>
+                    </TourTarget>
 
                     {enableExercise && (
                         <View style={styles.inputBoxInterior}>
-                            <Text style={styles.fieldTitle}>SELECT ASSESSMENT EXERCISE</Text>
+                            <Text style={styles.fieldTitle}>CHOOSE YOUR EXERCISE</Text>
                             <Pressable
                                 style={[styles.dropdownButton, { backgroundColor: theme.background, borderColor: theme.border }]}
                                 onPress={() => setShowDropdown(!showDropdown)}
+                                accessibilityRole="button"
+                                accessibilityState={{ expanded: showDropdown }}
+                                aria-expanded={showDropdown}
                             >
                                 <Text style={{ color: theme.text, fontWeight: '600', fontSize: 14 }}>
                                     {/* .find() locates the option object
@@ -604,6 +638,9 @@ export default function AdvancedStudentJournal() {
                                                 // picker would.
                                                 setShowDropdown(false);
                                             }}
+                                            accessibilityRole="radio"
+                                            accessibilityState={{ selected: selectedExercise === opt.key }}
+                                            aria-selected={selectedExercise === opt.key}
                                         >
                                             <Text style={{ color: theme.text, fontSize: 14, fontWeight: selectedExercise === opt.key ? '700' : '500' }}>
                                                 {opt.label}
@@ -614,11 +651,12 @@ export default function AdvancedStudentJournal() {
                             )}
 
                             <Text style={[styles.fieldTitle, { marginTop: 12 }]}>
-                                PERFORMANCE SCORE ({targetConfig.unit.toUpperCase()})
+                                YOUR SCORE ({targetConfig.unit.toUpperCase()})
                             </Text>
                             <Pressable
                                 style={[styles.mileageLaunchButton, { backgroundColor: theme.background, borderColor: theme.border }]}
                                 onPress={() => setScoreModalOpen(true)}
+                                accessibilityRole="button"
                             >
                                 <Text style={[styles.mileageLaunchButtonText, { color: theme.text }]}>
                                     {inputScore ? `${inputScore} ${targetConfig.unit}` : 'Enter Score'}
@@ -636,7 +674,7 @@ export default function AdvancedStudentJournal() {
                     )}
 
                     {/* OPTIONAL FIELD BLOCK 3: JOURNAL REFLECTIONS */}
-                    <Text style={[styles.fieldTitle, { marginTop: 18 }]}>PERSONAL REFLECTION DIARY (OPTIONAL)</Text>
+                    <Text style={[styles.fieldTitle, { marginTop: 18 }]}>TODAY&apos;S NOTES (OPTIONAL)</Text>
                     <TextInput
                         style={[styles.textArea, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
                         placeholder="Write anything about your day's journey, route notes, or wellness state..."
@@ -656,8 +694,9 @@ export default function AdvancedStudentJournal() {
                         style={[styles.actionSubmit, { backgroundColor: theme.accent }]}
                         onPress={() => void handleCommitLogEntry()}
                         disabled={submitting}
+                        accessibilityRole="button"
                     >
-                        {submitting ? <ActivityIndicator color="#FFF" /> : <Text style={styles.actionSubmitText}>Submit Log Entry</Text>}
+                        {submitting ? <ActivityIndicator color="#FFF" /> : <Text style={styles.actionSubmitText}>Save Today&apos;s Log</Text>}
                     </Pressable>
                 </View>
             </ScrollView>
@@ -682,29 +721,29 @@ export default function AdvancedStudentJournal() {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     container: { flex: 1 },
     profileBanner: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 14 },
-    bannerKicker: { fontSize: 8, letterSpacing: 0.8, fontWeight: '800', color: '#8E8E93', marginBottom: 2 },
+    bannerKicker: { fontSize: 8, letterSpacing: 0.8, fontWeight: '800', color: theme.subtext, marginBottom: 2 },
     bannerMainText: { fontSize: 13, fontWeight: '700' },
 
     inlineEditorContainer: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 18 },
     genderRowContainer: { flexDirection: 'row', gap: 10, marginTop: 4 },
     // flex: 1 makes the BOYS/GIRLS buttons split the row 50/50.
-    bracketSelectorButton: { flex: 1, height: 40, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#DDD' },
+    bracketSelectorButton: { flex: 1, height: 40, borderRadius: 8, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme.border },
     bracketButtonText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
     ageSliderContainer: { gap: 8, paddingVertical: 4 },
     // width: 44 / borderRadius: 18 — since 18 is less than half of 44
     // (which would be 22), these pills are ROUNDED but not perfectly
     // circular; they read as capsule/pill shapes since height (36) and
     // width (44) aren't equal either.
-    agePill: { width: 44, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#DDD' },
+    agePill: { width: 44, height: 36, borderRadius: 18, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme.border },
     agePillText: { fontSize: 13, fontWeight: '600' },
 
     journalSurface: { borderWidth: 1, borderRadius: 16, padding: 18 },
     surfaceTitle: { fontSize: 20, fontWeight: '800', fontFamily: 'Georgia', marginBottom: 4 },
-    surfaceSubtitle: { fontSize: 13, color: '#666', lineHeight: 18, marginBottom: 16 },
+    surfaceSubtitle: { fontSize: 13, color: theme.subtext, lineHeight: 18, marginBottom: 16 },
 
     // A fixed height of 50 (rather than letting padding determine the
     // height naturally) keeps both toggle rows exactly the same size
@@ -717,7 +756,7 @@ const styles = StyleSheet.create({
     // relative to the toggle row above it, hinting that it's "nested
     // under" that toggle.
     inputBoxInterior: { marginTop: 10, paddingLeft: 8 },
-    fieldTitle: { fontSize: 9, fontWeight: '800', color: '#666', letterSpacing: 0.8, marginBottom: 6 },
+    fieldTitle: { fontSize: 9, fontWeight: '800', color: theme.subtext, letterSpacing: 0.8, marginBottom: 6 },
     textArea: { borderWidth: 1, borderRadius: 12, padding: 12, fontSize: 14, minHeight: 70, textAlignVertical: 'top' },
     helperText: { fontSize: 11, fontWeight: '600', marginTop: 4, paddingLeft: 2 },
     mileageLaunchButton: { borderWidth: 1, borderRadius: 10, minHeight: 42, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },

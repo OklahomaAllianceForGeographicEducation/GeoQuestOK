@@ -32,6 +32,7 @@ import QuizModal from '../../components/QuizModal';
 // components/) — it likely wraps a native MapView, drawing the walked and
 // remaining route as separate colored lines plus landmark pins.
 import TrailMap from '../../components/TrailMap';
+import TourTarget from '../../components/tour/TourTarget';
 import { getTrailMilesForUser, logMilesActivity } from '../../lib/activity';
 import { signOutAndRedirect } from '../../lib/auth';
 import {
@@ -195,6 +196,8 @@ function LandmarkCard({ landmark, onPress, dStyles, isPassed, milesToGo, hasPend
             // quiz popup before actually reaching it on the trail (same
             // rule the "All Landmarks" list enforces).
             disabled={!isPassed}
+            accessibilityRole="button"
+            accessibilityLabel={isPassed ? landmark.title : `${landmark.title}, locked, ${formatMiles(milesToGo)} miles to go`}
         >
             <View style={dStyles.landmarkImagePlaceholder}>
                 <Text style={dStyles.landmarkImageIcon}>{isPassed ? '📍' : '🔒'}</Text>
@@ -264,10 +267,10 @@ function AllLandmarksModal({ landmarks, milesWalked, onSelectLandmark, onClose, 
                 back up to this one, so tapping inside it doesn't close it. */}
             <ModalBackdrop style={dStyles.modalOverlay} onPress={onClose}>
                 <Pressable style={[dStyles.modalSheet, { maxHeight: '85%' }]} onPress={(e) => e.stopPropagation()}>
-                    <Pressable style={[customModalStyles.modernCloseBtn, { backgroundColor: theme?.accent || '#FF5722' }]} onPress={onClose}>
+                    <Pressable style={[customModalStyles.modernCloseBtn, { backgroundColor: theme?.accent || '#FF5722' }]} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
                         <Text style={customModalStyles.modernCloseBtnText}>Close</Text>
                     </Pressable>
-                    <Text style={[dStyles.modalTitle, { padding: 24, paddingLeft: 16 }]}>All Landmarks</Text>
+                    <Text style={[dStyles.modalTitle, { padding: 24, paddingLeft: 16 }]} accessibilityRole="header">All Landmarks</Text>
                     <ScrollView>
                         {sortedLandmarks.map((l: any) => {
                             // A landmark the student hasn't walked far enough to
@@ -283,6 +286,8 @@ function AllLandmarksModal({ landmarks, milesWalked, onSelectLandmark, onClose, 
                                     style={[dStyles.allLandmarkRow, !isPassed && dStyles.allLandmarkRowLocked]}
                                     disabled={!isPassed}
                                     onPress={() => { onClose(); onSelectLandmark(l); }}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={isPassed ? l.title : `${l.title}, locked, ${formatMiles(milesToGo)} mi to go`}
                                 >
                                     <View style={[dStyles.allLandmarkDot, isPassed && dStyles.allLandmarkDotPassed, { marginTop: 4 }]} />
                                     <Text style={[dStyles.allLandmarkTitle, !isPassed && dStyles.allLandmarkTitleLocked]}>
@@ -346,7 +351,7 @@ function LogMilesModal({ onLog, onClose, dStyles, theme }: any) {
         <Modal visible animationType="slide" transparent onRequestClose={onClose}>
             <ModalBackdrop style={dStyles.modalOverlay}>
                 <View style={[customModalStyles.logModalSheet, { paddingBottom: 24 }]}>
-                    <Pressable style={[customModalStyles.modernCloseBtn, { backgroundColor: theme?.accent || '#FF5722' }]} onPress={onClose}>
+                    <Pressable style={[customModalStyles.modernCloseBtn, { backgroundColor: theme?.accent || '#FF5722' }]} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
                         <Text style={customModalStyles.modernCloseBtnText}>Close</Text>
                     </Pressable>
 
@@ -377,13 +382,13 @@ function LogMilesModal({ onLog, onClose, dStyles, theme }: any) {
 
                     {/* Quick action buttons */}
                     <View style={[customModalStyles.quickActionRow, { marginBottom: 16 }]}>
-                        <Pressable style={customModalStyles.quickActionPill} onPress={() => handleQuickLog(1)}>
+                        <Pressable style={customModalStyles.quickActionPill} onPress={() => handleQuickLog(1)} accessibilityRole="button">
                             <Text style={customModalStyles.quickActionPillText}>+1 mi</Text>
                         </Pressable>
-                        <Pressable style={customModalStyles.quickActionPill} onPress={() => handleQuickLog(3)}>
+                        <Pressable style={customModalStyles.quickActionPill} onPress={() => handleQuickLog(3)} accessibilityRole="button">
                             <Text style={customModalStyles.quickActionPillText}>+3 mi</Text>
                         </Pressable>
-                        <Pressable style={customModalStyles.quickActionPill} onPress={() => handleQuickLog(5)}>
+                        <Pressable style={customModalStyles.quickActionPill} onPress={() => handleQuickLog(5)} accessibilityRole="button">
                             <Text style={customModalStyles.quickActionPillText}>+5 mi</Text>
                         </Pressable>
                     </View>
@@ -413,6 +418,8 @@ function LogMilesModal({ onLog, onClose, dStyles, theme }: any) {
                                         // every other key just passes its
                                         // own character straight through.
                                         onPress={() => handleKeyPress(key === '⌫' ? 'delete' : key)}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={key === '⌫' ? 'Backspace' : key === '.' ? 'Decimal point' : key}
                                     >
                                         <Text style={padStyles.keyText}>{key}</Text>
                                     </Pressable>
@@ -436,6 +443,7 @@ function LogMilesModal({ onLog, onClose, dStyles, theme }: any) {
                                 setIsSaving(false);
                             }
                         }}
+                        accessibilityRole="button"
                     >
                         <Text style={[dStyles.customLogButtonText, { textAlign: 'center', width: '100%' }]}>
                             {isSaving ? "Saving..." : "Log Miles"}
@@ -500,13 +508,13 @@ function TrailCompleteModal({ trails, onSelectTrail, dStyles, mode, onClose }: a
             <ModalBackdrop style={dStyles.modalOverlay}>
                 <View style={[dStyles.modalSheet, { height: '85%', width: '94%', maxWidth: 440, paddingHorizontal: 16, paddingVertical: 20, alignSelf: 'center' }]}>
                     {dismissible && (
-                        <Pressable style={[customModalStyles.modernCloseBtn, { backgroundColor: '#8E8E93' }]} onPress={onClose}>
+                        <Pressable style={[customModalStyles.modernCloseBtn, { backgroundColor: '#8E8E93' }]} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
                             <Text style={customModalStyles.modernCloseBtnText}>Close</Text>
                         </Pressable>
                     )}
                     {/* The title wording differs depending on WHY this
                         modal is showing. */}
-                    <Text style={[dStyles.modalTitle, { paddingLeft: 4, paddingBottom: 4, fontSize: 21, fontFamily: 'Georgia', fontWeight: '800', textAlign: 'left', width: '100%' }]}>
+                    <Text style={[dStyles.modalTitle, { paddingLeft: 4, paddingBottom: 4, fontSize: 21, fontFamily: 'Georgia', fontWeight: '800', textAlign: 'left', width: '100%' }]} accessibilityRole="header">
                         {mode === 'initial' && 'Choose Your Target Trail'}
                         {mode === 'completed' && 'Trail Completed! Select Next Destination'}
                         {mode === 'voluntary' && 'Switch Trail'}
@@ -538,7 +546,7 @@ function TrailCompleteModal({ trails, onSelectTrail, dStyles, mode, onClose }: a
                                 // any known key.
                                 const badgeColor = DIFFICULTY_COLORS[trail.difficulty as TrailSummary['difficulty']] || '#8E8E93';
                                 return (
-                                    <Pressable key={trail.id} style={customModalStyles.vintageTrailCard} onPress={() => onSelectTrail(trail)}>
+                                    <Pressable key={trail.id} style={customModalStyles.vintageTrailCard} onPress={() => onSelectTrail(trail)} accessibilityRole="button" accessibilityLabel={`${trail.name}, ${formatMiles(trail.miles)} miles`}>
                                         <Image
                                             // If this trail has no
                                             // image_url set, fall back to a
@@ -717,10 +725,12 @@ const customModalStyles = StyleSheet.create({
     },
     vintageTrailRoute: {
         fontSize: 12,
-        color: '#636366',
+        // Was an iOS-gray outlier (#636366) inside an otherwise warm
+        // "vintage" palette shared with this same modal's #4E3629/#5C5446
+        // and Passport's field-journal theme -- normalized to match.
+        color: '#756D5E',
         marginTop: 4,
         lineHeight: 16,
-        fontFamily: 'System'
     }
 });
 
@@ -739,7 +749,7 @@ export default function DashboardScreen() {
     const { refreshBadgeInbox } = useBadgeUnlocks();
 
     // Structural User Metadata States
-    const [userRole, setUserRole] = useState<'student' | 'teacher' | 'admin'>('student');
+    const [userRole, setUserRole] = useState<'student' | 'teacher' | 'admin' | 'site_admin'>('student');
     // Whether this account (if a teacher/admin) is currently viewing the
     // student-style "classic" experience or their normal teacher tools.
     const [activeView, setActiveView] = useState<'classic' | 'teacher'>('classic');
@@ -845,11 +855,11 @@ export default function DashboardScreen() {
 
                 setCompletedTrailIds((completedTrails || []).map((row: { trail_id: string }) => String(row.trail_id)));
 
-                // Teachers/admins currently viewing their OWN teacher
+                // Teachers/site admins currently viewing their OWN teacher
                 // dashboard (not previewing the classic student view)
                 // don't need any of the student-specific trail-loading
                 // logic below — bail out early.
-                if ((extractedRole === 'teacher' || extractedRole === 'admin') && extractedView === 'teacher') {
+                if ((extractedRole === 'teacher' || extractedRole === 'site_admin') && extractedView === 'teacher') {
                     return;
                 }
 
@@ -1200,16 +1210,25 @@ export default function DashboardScreen() {
 
     if (loadingLayout) {
         return (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme?.background || '#F6EFE7' }}>
                 <ActivityIndicator size="large" color={theme?.accent || '#FF5722'} />
             </View>
         );
     }
 
     // Whether this account should see the STUDENT map/trail experience —
-    // true for genuine students, and ALSO true for a teacher currently
-    // previewing the classic view.
-    const isStudentShell = userRole === 'student' || (userRole === 'teacher' && activeView === 'classic');
+    // true for genuine students, and ALSO true for a teacher/site_admin/
+    // okage/etc. currently previewing the classic view. Deliberately NOT
+    // narrowed to `userRole === 'teacher'`: every other role/view gate in
+    // this file already uses the role-agnostic `activeView === 'classic'`
+    // pattern (see the `userRole !== 'student' && activeView !== 'classic'`
+    // early-returns above), since lib/access.ts's getAllowedTeacherViews is
+    // what actually decides which roles are allowed into classic view in
+    // the first place -- this check doesn't need its own role allowlist.
+    // Hardcoding just 'teacher' here left site_admin (and okage) previewers
+    // landing on the "create a class" educator-fallback card below instead
+    // of the real walking/mileage UI.
+    const isStudentShell = userRole === 'student' || activeView === 'classic';
 
     // If NOT the student shell, render a simplified educator summary card
     // instead of the map interface — this is a minimal fallback view
@@ -1219,30 +1238,30 @@ export default function DashboardScreen() {
     // somehow lands on the classic tab group without switching views.
     if (!isStudentShell) {
         return (
-            <View style={teacherStyles.container}>
+            <View style={[teacherStyles.container, { backgroundColor: theme.background }]}>
                 <StatusBar barStyle="dark-content" />
                 <ScrollView contentContainerStyle={teacherStyles.scrollContent}>
-                    <View style={teacherStyles.badgeRow}>
-                        <Text style={[teacherStyles.badgeText, { color: theme?.accent || '#FF5722' }]}>🎯 EDUCATOR HUB ACTIVE</Text>
+                    <View style={[teacherStyles.badgeRow, { backgroundColor: theme.border }]}>
+                        <Text style={[teacherStyles.badgeText, { color: theme.accent }]}>🎯 Educator View</Text>
                     </View>
-                    <Text style={teacherStyles.titleText}>Welcome back, {greetingName}</Text>
-                    <Text style={teacherStyles.subTitleText}>📍 Managing: {schoolDistrict}</Text>
+                    <Text style={[teacherStyles.titleText, { color: theme.text }]} accessibilityRole="header">Welcome back, {greetingName}</Text>
+                    <Text style={[teacherStyles.subTitleText, { color: theme.subtext }]}>📍 Managing: {schoolDistrict}</Text>
                     {/* gradesText.replace('_', ' ') swaps the FIRST
                         underscore for a space (e.g. "middle_school" →
                         "middle school"), then .toUpperCase() capitalizes
                         it entirely for display. */}
-                    {gradesText ? <Text style={teacherStyles.metaText}>Class Tier: {gradesText.replace('_', ' ').toUpperCase()}</Text> : null}
-                    <View style={teacherStyles.card}>
-                        <Text style={teacherStyles.cardHeader}>Classroom Management Controls</Text>
-                        <Text style={teacherStyles.cardBody}>
-                            Your account is fully registered as an Educator. You can now configure student group metrics, track pooled mileage standings, and review classroom leaderboards.
+                    {gradesText ? <Text style={[teacherStyles.metaText, { color: theme.subtext }]}>Class Tier: {gradesText.replace('_', ' ').toUpperCase()}</Text> : null}
+                    <View style={[teacherStyles.card, { backgroundColor: theme.surface, shadowColor: theme.shadow }]}>
+                        <Text style={[teacherStyles.cardHeader, { color: theme.text }]} accessibilityRole="header">Classroom Tools</Text>
+                        <Text style={[teacherStyles.cardBody, { color: theme.subtext }]}>
+                            Your account is registered as an Educator. Head to the Classes tab to create a class, manage rosters, and review classroom leaderboards.
                         </Text>
-                        <Pressable style={[teacherStyles.primaryButton, { backgroundColor: theme?.accent || '#FF5722' }]} onPress={() => Alert.alert("Coming Soon", "Class creation metrics will display here.")}>
-                            <Text style={teacherStyles.buttonText}>+ Setup New Classroom Team</Text>
+                        <Pressable style={[teacherStyles.primaryButton, { backgroundColor: theme.accent }]} onPress={() => router.push('/(teacher-tabs)/classes' as any)} accessibilityRole="link">
+                            <Text style={teacherStyles.buttonText}>Go to Classes</Text>
                         </Pressable>
                     </View>
-                    <Pressable style={teacherStyles.signOutButton} onPress={() => void signOutAndRedirect(router)}>
-                        <Text style={teacherStyles.signOutText}>Logout Account</Text>
+                    <Pressable style={teacherStyles.signOutButton} onPress={() => void signOutAndRedirect(router)} accessibilityRole="button">
+                        <Text style={[teacherStyles.signOutText, { color: theme.error }]}>Sign Out</Text>
                     </Pressable>
                 </ScrollView>
             </View>
@@ -1259,12 +1278,12 @@ export default function DashboardScreen() {
             <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 80, paddingTop: 10 }}>
                 <View style={dStyles.header}>
                     <View style={{ flex: 1, paddingRight: 8 }}>
-                        <Text style={dStyles.headerGreeting}>Ready to walk, {greetingName}?</Text>
+                        <Text style={dStyles.headerGreeting} accessibilityRole="header">Ready to walk, {greetingName}?</Text>
                         <Text style={dStyles.headerTrailName} numberOfLines={1}>{trailName}</Text>
                         {/* Always available -- not just when a trail is
                             finished -- so a student can correct which
                             trail they're on for a class at any time. */}
-                        <Pressable onPress={() => setSwitchTrailModalOpen(true)} hitSlop={8}>
+                        <Pressable onPress={() => setSwitchTrailModalOpen(true)} hitSlop={8} accessibilityRole="button">
                             <Text style={{ color: theme.accent, fontSize: 12, fontWeight: '700', marginTop: 2 }}>Switch Trail</Text>
                         </Pressable>
                     </View>
@@ -1310,9 +1329,11 @@ export default function DashboardScreen() {
                     }, 500)}
                 />
 
-                <View style={[dStyles.ctaRow, { gap: 12, paddingHorizontal: 16 }]}>
-                    <Pressable style={[dStyles.logButton, { flex: 1 }]} onPress={() => router.push('/fitness')}><Text style={dStyles.logButtonText}>Open Daily Log</Text></Pressable>
-                    <Pressable style={[dStyles.logButton, { flex: 1 }]} onPress={() => setAllLandmarksOpen(true)}><Text style={dStyles.logButtonText}>All Landmarks</Text></Pressable>
+                <View style={[dStyles.ctaRow, { flexDirection: 'row', gap: 12, paddingHorizontal: 16 }]}>
+                    <TourTarget id="student.logButton" style={{ flex: 1 }}>
+                        <Pressable style={dStyles.logButton} onPress={() => router.push('/fitness')} accessibilityRole="link"><Text style={dStyles.logButtonText}>Open Daily Log</Text></Pressable>
+                    </TourTarget>
+                    <Pressable style={[dStyles.logButton, { flex: 1 }]} onPress={() => setAllLandmarksOpen(true)} accessibilityRole="button"><Text style={dStyles.logButtonText}>All Landmarks</Text></Pressable>
                 </View>
 
                 {/* The "quizzes waiting" banner only appears when there's
@@ -1324,6 +1345,7 @@ export default function DashboardScreen() {
                         <Pressable
                             style={[dStyles.logButton, { backgroundColor: theme?.accent || '#FF5722' }]}
                             onPress={() => setPopupQueue(pendingQuizzes)}
+                            accessibilityRole="button"
                         >
                             <Text style={dStyles.logButtonText}>📝 Quizzes waiting for you ({pendingQuizzes.length})</Text>
                         </Pressable>
@@ -1334,7 +1356,7 @@ export default function DashboardScreen() {
                     scrolling landmark card strip, so this section doesn't
                     change the overall page layout height regardless of
                     how many landmarks exist. */}
-                <View style={{ height: 170 }}>
+                <TourTarget id="student.landmarkStrip" style={{ height: 170 }}>
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={dStyles.landmarkStrip}>
                         {/* .slice() makes a shallow copy before .sort()
                             (which mutates in place), same defensive pattern
@@ -1359,7 +1381,7 @@ export default function DashboardScreen() {
                             );
                         })}
                     </ScrollView>
-                </View>
+                </TourTarget>
             </ScrollView>
 
             <MileageLogModal
@@ -1416,18 +1438,18 @@ export default function DashboardScreen() {
 // branch above) — kept separate from the shared dStyles object since this
 // is a distinct, minimal layout only used in that one edge case.
 const teacherStyles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: '#F8F9FA' },
+    container: { flex: 1 },
     scrollContent: { padding: 24, paddingTop: 15, alignItems: 'center' },
-    badgeRow: { backgroundColor: '#E3F2FD', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginBottom: 16 },
+    badgeRow: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, marginBottom: 16 },
     badgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
-    titleText: { fontSize: 26, fontWeight: 'bold', color: '#1C1C1E', textAlign: 'center', marginBottom: 4 },
-    subTitleText: { fontSize: 15, fontWeight: '600', color: '#636366', textAlign: 'center', marginBottom: 2 },
-    metaText: { fontSize: 12, fontWeight: '700', color: '#8E8E93', textTransform: 'uppercase', marginBottom: 20 },
-    card: { backgroundColor: '#FFF', width: '100%', padding: 20, borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3, marginBottom: 30 },
-    cardHeader: { fontSize: 16, fontWeight: '700', color: '#1C1C1E', marginBottom: 8 },
-    cardBody: { fontSize: 14, color: '#636366', lineHeight: 20, marginBottom: 20 },
+    titleText: { fontSize: 26, fontWeight: 'bold', fontFamily: 'Georgia', textAlign: 'center', marginBottom: 4 },
+    subTitleText: { fontSize: 15, fontWeight: '600', textAlign: 'center', marginBottom: 2 },
+    metaText: { fontSize: 12, fontWeight: '700', textTransform: 'uppercase', marginBottom: 20 },
+    card: { width: '100%', padding: 20, borderRadius: 16, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3, marginBottom: 30 },
+    cardHeader: { fontSize: 16, fontWeight: '700', fontFamily: 'Georgia', marginBottom: 8 },
+    cardBody: { fontSize: 14, lineHeight: 20, marginBottom: 20 },
     primaryButton: { padding: 14, borderRadius: 10, alignItems: 'center' },
     buttonText: { color: '#FFF', fontWeight: '700', fontSize: 14 },
     signOutButton: { marginTop: 10, padding: 10 },
-    signOutText: { color: '#FF3B30', fontWeight: '600', fontSize: 14 }
+    signOutText: { fontWeight: '600', fontSize: 14 }
 });

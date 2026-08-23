@@ -45,4 +45,23 @@ input, textarea, [contenteditable="true"] {
   user-select: text;
   -webkit-touch-callout: default;
 }
+
+/* React Native Web ships every focusable element with a
+   ".r-outlineStyle-*  { outline-style: none; }" atomic class and no
+   replacement, so keyboard users get no visible focus indicator anywhere
+   in the app -- confirmed live across every Pressable on the marketing
+   site (nav, hero CTAs, FAQ accordion, footer) during an /impeccable
+   audit. Fixed once here rather than per-component since the removal is
+   itself global; !important is needed because RNW's rule and this one
+   have equal selector specificity and its stylesheet is injected after
+   this one, so it would otherwise win on injection order alone. */
+:focus-visible {
+  outline: 2px solid #241E18 !important;
+  outline-offset: 2px !important;
+}
+@media (prefers-color-scheme: dark) {
+  :focus-visible {
+    outline-color: #F6EFE7 !important;
+  }
+}
 `;

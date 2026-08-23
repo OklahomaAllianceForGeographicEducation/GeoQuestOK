@@ -24,6 +24,7 @@ import {
     StyleSheet,
     Text,
     TextInput,
+    useColorScheme,
     View,
 } from 'react-native';
 // getGlobalStyles is a shared style factory (like getTrailStyles /
@@ -33,9 +34,9 @@ import {
 // specific to just this screen's edit sheet.
 import { colors, getGlobalStyles, type Theme } from '../../commonStyles';
 import AdaptiveBlur from '../../components/AdaptiveBlur';
-import Button from '../../components/Button';
 import { signOutAndRedirect } from '../../lib/auth';
 import { confirmAlert } from '../../lib/confirmAlert';
+import { requestTourReplay } from '../../lib/onboarding';
 import { ensureProfileRow } from '../../lib/profiles';
 import { supabase } from '../../utils/supabase';
 
@@ -125,7 +126,7 @@ function getAccountStyles(theme: Theme) {
         cancelButton: { backgroundColor: theme.surface, borderWidth: 1, borderColor: theme.border },
         saveButton: { backgroundColor: theme.accent },
         cancelText: { color: theme.text, fontWeight: '600', fontSize: 15 },
-        saveText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+        saveText: { color: theme.accentText, fontWeight: '700', fontSize: 15 },
         scrollerWrapperContainer: { marginVertical: 4, height: 48 },
         optionChip: {
             paddingHorizontal: 16,
@@ -140,7 +141,7 @@ function getAccountStyles(theme: Theme) {
         },
         optionChipActive: { backgroundColor: theme.accent, borderColor: theme.accent },
         optionChipText: { fontSize: 13, fontWeight: '600', color: theme.text },
-        optionChipTextActive: { color: '#fff' },
+        optionChipTextActive: { color: theme.accentText },
         // A small circular swatch for each background color option.
         colorCircle: { width: 34, height: 34, borderRadius: 17, marginRight: 10, borderWidth: 2, borderColor: 'transparent' },
         colorCircleSelected: { borderColor: theme.accent },
@@ -157,7 +158,7 @@ function getAccountStyles(theme: Theme) {
         viewSwitcherBox: { borderWidth: 1, padding: 14, borderRadius: 16, marginHorizontal: 20, marginTop: 10, marginBottom: 14 },
         switcherTitle: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 10, textAlign: 'center' },
         segmentedBar: { flexDirection: 'row', gap: 8 },
-        segmentToggle: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 10, backgroundColor: '#F2F2F7' },
+        segmentToggle: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10, borderRadius: 10, backgroundColor: theme.background },
         segmentLabel: { fontSize: 13, fontWeight: '700' },
         centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
         // position: 'relative' + zIndex: 1 lets the floating dropdown
@@ -165,27 +166,30 @@ function getAccountStyles(theme: Theme) {
         // above surrounding content.
         fieldBlock: { position: 'relative', zIndex: 1 },
         dropdownWindow: {
-            backgroundColor: '#FFF',
+            backgroundColor: theme.surface,
             borderWidth: 1,
-            borderColor: '#C7C7CC',
+            borderColor: theme.border,
             borderRadius: 12,
             marginTop: 2,
             marginBottom: 10,
             maxHeight: 200,
             elevation: 6,
-            shadowColor: '#000',
+            // theme.shadow, not plain black -- DESIGN.md's "Warm Shadow
+            // Rule": every shadow tinted warm, never a neutral black.
+            shadowColor: theme.shadow,
             shadowOpacity: 0.15,
             shadowRadius: 6,
             shadowOffset: { width: 0, height: 3 },
         },
-        dropdownRow: { paddingVertical: 14, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: '#E5E5EA' },
-        dropdownRowText: { fontSize: 15, color: '#1C1C1E', fontWeight: '500' },
+        dropdownRow: { paddingVertical: 14, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: theme.border },
+        dropdownRowText: { fontSize: 15, color: theme.text, fontWeight: '500' },
         inlineLoader: { position: 'absolute', right: 14, top: 38 },
     });
 }
 
 export default function TeacherAccountScreen() {
-    const theme = colors.light;
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
     const baseStyles = getGlobalStyles(theme);
     const accountStyles = getAccountStyles(theme);
     const router = useRouter();
@@ -640,36 +644,62 @@ export default function TeacherAccountScreen() {
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }} showsVerticalScrollIndicator={false}>
                 {/* Hero Header */}
                 <View style={baseStyles.profileImageContainer}>
-                    <Pressable style={baseStyles.avatarEditWrapper} onPress={() => setEditOpen(true)} hitSlop={8}>
+                    <Pressable style={baseStyles.avatarEditWrapper} onPress={() => setEditOpen(true)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Edit profile picture">
                         <View style={baseStyles.avatarRing}>
                             <Image source={{ uri: currentAvatarUrl }} style={baseStyles.profileImage} contentFit="contain" />
                         </View>
                         <View style={baseStyles.avatarEditBadge}>
-                            <Ionicons name="pencil" size={16} color="#FFF" />
+                            <Ionicons name="pencil" size={16} color={theme.accentText} />
                         </View>
                     </Pressable>
-                    <Text style={baseStyles.profileGreeting}>Welcome back, {profile?.display_name || profile?.username || 'Educator'}</Text>
+                    <Text style={baseStyles.profileGreeting} accessibilityRole="header">Welcome back, {profile?.display_name || profile?.username || 'Educator'}</Text>
                     <Text style={baseStyles.profileSubtext}>Educator Portal</Text>
                 </View>
 
                 {/* View Switcher */}
                 <View style={[accountStyles.viewSwitcherBox, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                    <Text style={[accountStyles.switcherTitle, { color: theme.text }]}>Active App View Workspace</Text>
+                    <Text style={[accountStyles.switcherTitle, { color: theme.text }]} accessibilityRole="header">Active App View Workspace</Text>
                     <View style={accountStyles.segmentedBar}>
-                        <Pressable style={[accountStyles.segmentToggle, profile?.active_view === 'teacher' && { backgroundColor: theme.accent }]} onPress={() => void handleToggleAppView('teacher')}>
-                            <Ionicons name="briefcase" size={14} color={profile?.active_view === 'teacher' ? '#FFF' : theme.text} />
-                            <Text style={[accountStyles.segmentLabel, profile?.active_view === 'teacher' ? { color: '#FFF' } : { color: theme.text }]}>Teacher Desk</Text>
+                        <Pressable style={[accountStyles.segmentToggle, profile?.active_view === 'teacher' && { backgroundColor: theme.accent }]} onPress={() => void handleToggleAppView('teacher')} accessibilityRole="radio" accessibilityState={{ selected: profile?.active_view === 'teacher' }} aria-selected={profile?.active_view === 'teacher'}>
+                            <Ionicons name="briefcase" size={14} color={profile?.active_view === 'teacher' ? theme.accentText : theme.text} />
+                            <Text style={[accountStyles.segmentLabel, profile?.active_view === 'teacher' ? { color: theme.accentText } : { color: theme.text }]}>Teacher Desk</Text>
                         </Pressable>
-                        <Pressable style={[accountStyles.segmentToggle, profile?.active_view === 'classic' && { backgroundColor: theme.accent }]} onPress={() => void handleToggleAppView('classic')}>
-                            <Ionicons name="walk" size={14} color={profile?.active_view === 'classic' ? '#FFF' : theme.text} />
-                            <Text style={[accountStyles.segmentLabel, profile?.active_view === 'classic' ? { color: '#FFF' } : { color: theme.text }]}>Classic Trail</Text>
+                        <Pressable style={[accountStyles.segmentToggle, profile?.active_view === 'classic' && { backgroundColor: theme.accent }]} onPress={() => void handleToggleAppView('classic')} accessibilityRole="radio" accessibilityState={{ selected: profile?.active_view === 'classic' }} aria-selected={profile?.active_view === 'classic'}>
+                            <Ionicons name="walk" size={14} color={profile?.active_view === 'classic' ? theme.accentText : theme.text} />
+                            <Text style={[accountStyles.segmentLabel, profile?.active_view === 'classic' ? { color: theme.accentText } : { color: theme.text }]}>Classic Trail</Text>
                         </Pressable>
                     </View>
                 </View>
 
                 {/* Actions */}
                 <View style={baseStyles.AccountMain}>
-                    <Button label="Sign Out Account" onPress={handleSignOutAction} style={{ backgroundColor: '#FF3B30' }} />
+                    {/* Demoted from a full-width filled Button to a smaller
+                        outlined control, same fix as student-account.tsx's
+                        Sign Out (see that file's comment) -- was identical
+                        size/shape to the primary actions on the student
+                        screen's equivalent, and #FF3B30 measured 3.55:1 as
+                        white-on-fill text, failing AA. #D70015 (4.72:1 as
+                        text on this cream background) is the same "one
+                        error color" already used across the auth flow. */}
+                    <Pressable
+                        onPress={() => requestTourReplay('teacher')}
+                        style={{ alignSelf: 'center', marginTop: 4, paddingVertical: 13, paddingHorizontal: 18, borderRadius: 10, borderWidth: 1, borderColor: theme.accent }}
+                        accessibilityRole="button"
+                    >
+                        <Text style={{ color: theme.accent, fontWeight: '600', fontSize: 14 }}>Replay Tour</Text>
+                    </Pressable>
+
+                    <Pressable
+                        onPress={handleSignOutAction}
+                        // paddingVertical 10 measured 39px live, 5px under
+                        // the 44px touch-target floor -- caught in a later
+                        // /impeccable critique round after the original
+                        // demotion fix. 13 clears it.
+                        style={{ alignSelf: 'center', marginTop: 10, paddingVertical: 13, paddingHorizontal: 18, borderRadius: 10, borderWidth: 1, borderColor: theme.error }}
+                        accessibilityRole="button"
+                    >
+                        <Text style={{ color: theme.error, fontWeight: '600', fontSize: 14 }}>Sign Out</Text>
+                    </Pressable>
                 </View>
 
                 <Text style={baseStyles.acknowledgementText}>
@@ -688,7 +718,7 @@ export default function TeacherAccountScreen() {
 
                     <View style={accountStyles.sheet}>
                         <ScrollView contentContainerStyle={{ paddingBottom: 30 }} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                            <Text style={accountStyles.modalTitle}>Customize Profile Settings</Text>
+                            <Text style={accountStyles.modalTitle} accessibilityRole="header">Customize Profile Settings</Text>
                             <View style={accountStyles.modalDivider} />
 
                             {/* Live avatar preview — gets an accent-colored
@@ -704,15 +734,15 @@ export default function TeacherAccountScreen() {
                             {/* Left/right arrows to cycle through the 50
                                 numbered avatar seed variations. */}
                             <View style={accountStyles.arrowPickerContainer}>
-                                <Pressable style={accountStyles.arrowButton} onPress={handlePreviousSeed}>
+                                <Pressable style={accountStyles.arrowButton} onPress={handlePreviousSeed} accessibilityRole="button" accessibilityLabel="Previous look">
                                     <Text style={accountStyles.arrowButtonText}>‹</Text>
                                 </Pressable>
-                                <Pressable style={accountStyles.arrowButton} onPress={handleNextSeed}>
+                                <Pressable style={accountStyles.arrowButton} onPress={handleNextSeed} accessibilityRole="button" accessibilityLabel="Next look">
                                     <Text style={accountStyles.arrowButtonText}>›</Text>
                                 </Pressable>
                             </View>
 
-                            <Pressable style={[accountStyles.defaultResetButton, isUsingNicknameLook && accountStyles.defaultResetButtonActive]} onPress={handleToggleMatchPublicHandle}>
+                            <Pressable style={[accountStyles.defaultResetButton, isUsingNicknameLook && accountStyles.defaultResetButtonActive]} onPress={handleToggleMatchPublicHandle} accessibilityRole="button">
                                 <Text style={[accountStyles.defaultResetText, isUsingNicknameLook && accountStyles.defaultResetTextActive]}>
                                     {isUsingNicknameLook ? '✨ Matching Handle Avatar Active' : '✨ Match Public Handle'}
                                 </Text>
@@ -721,7 +751,7 @@ export default function TeacherAccountScreen() {
                             <Text style={accountStyles.label}>AVATAR VECTOR STYLE</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={accountStyles.scrollerWrapperContainer}>
                                 {ART_STYLES.map((s) => (
-                                    <Pressable key={s} style={[accountStyles.optionChip, chosenStyle === s && accountStyles.optionChipActive]} onPress={() => setChosenStyle(s)}>
+                                    <Pressable key={s} style={[accountStyles.optionChip, chosenStyle === s && accountStyles.optionChipActive]} onPress={() => setChosenStyle(s)} accessibilityRole="radio" accessibilityState={{ selected: chosenStyle === s }} aria-selected={chosenStyle === s}>
                                         <Text style={[accountStyles.optionChipText, chosenStyle === s && accountStyles.optionChipTextActive]}>{s}</Text>
                                     </Pressable>
                                 ))}
@@ -729,8 +759,8 @@ export default function TeacherAccountScreen() {
 
                             <Text style={accountStyles.label}>BACKGROUND THEME COLOR</Text>
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={accountStyles.scrollerWrapperContainer}>
-                                {BG_COLORS.map((color) => (
-                                    <Pressable key={color} style={[accountStyles.colorCircle, { backgroundColor: `#${color}` }, chosenBg === color && accountStyles.colorCircleSelected]} onPress={() => setChosenBg(color)} />
+                                {BG_COLORS.map((color, idx) => (
+                                    <Pressable key={color} style={[accountStyles.colorCircle, { backgroundColor: `#${color}` }, chosenBg === color && accountStyles.colorCircleSelected]} onPress={() => setChosenBg(color)} accessibilityRole="radio" accessibilityState={{ selected: chosenBg === color }} aria-selected={chosenBg === color} accessibilityLabel={`Background color ${idx + 1}`} />
                                 ))}
                             </ScrollView>
 
@@ -780,6 +810,7 @@ export default function TeacherAccountScreen() {
                                                 <Pressable
                                                     key={item.id}
                                                     style={accountStyles.dropdownRow}
+                                                    accessibilityRole="button"
                                                     onPress={() => {
                                                         setSelectedDistrict(item);
                                                         setDistrictQuery(item.district_name);
@@ -833,6 +864,7 @@ export default function TeacherAccountScreen() {
                                                 <Pressable
                                                     key={item.id}
                                                     style={accountStyles.dropdownRow}
+                                                    accessibilityRole="button"
                                                     onPress={() => {
                                                         setSelectedSchool(item);
                                                         setSchoolQuery(item.school_name);
@@ -867,12 +899,16 @@ export default function TeacherAccountScreen() {
                                                 borderRadius: 12,
                                                 borderWidth: 1,
                                                 borderColor: gradeDraft === tier ? theme.accent : theme.border,
-                                                // A pale peach/cream tint
-                                                // (#FFF9F2) for the selected
-                                                // cell's background —
-                                                // hardcoded rather than
-                                                // theme-driven.
-                                                backgroundColor: gradeDraft === tier ? '#FFF9F2' : theme.surface,
+                                                // A low-opacity tint of the
+                                                // theme's own accent color
+                                                // for the selected cell's
+                                                // background, matching the
+                                                // rowHighlighted/funFactBox
+                                                // pattern elsewhere -- reads
+                                                // as "selected" in both
+                                                // themes instead of a fixed
+                                                // pale-cream fill.
+                                                backgroundColor: gradeDraft === tier ? theme.accent + '18' : theme.surface,
                                                 opacity: pressed ? 0.8 : 1,
                                                 // minWidth: '48%' combined
                                                 // with flex: 1 achieves the
@@ -884,6 +920,9 @@ export default function TeacherAccountScreen() {
                                             }
                                         ]}
                                         onPress={() => setGradeDraft(tier)}
+                                        accessibilityRole="radio"
+                                        accessibilityState={{ selected: gradeDraft === tier }}
+                                        aria-selected={gradeDraft === tier}
                                     >
                                         <Text style={{ fontWeight: gradeDraft === tier ? '700' : '500', color: gradeDraft === tier ? theme.accent : theme.text, fontSize: 13 }}>
                                             {tier === 'elementary' && '👶 Elementary'}
@@ -897,11 +936,11 @@ export default function TeacherAccountScreen() {
                         </ScrollView>
 
                         <View style={accountStyles.modalActions}>
-                            <Pressable style={[accountStyles.actionButton, accountStyles.cancelButton]} onPress={() => setEditOpen(false)}>
+                            <Pressable style={[accountStyles.actionButton, accountStyles.cancelButton]} onPress={() => setEditOpen(false)} accessibilityRole="button">
                                 <Text style={accountStyles.cancelText}>Cancel</Text>
                             </Pressable>
-                            <Pressable style={[accountStyles.actionButton, accountStyles.saveButton]} onPress={() => void saveProfileChanges()}>
-                                {updating ? <ActivityIndicator color="#fff" size="small" /> : <Text style={accountStyles.saveText}>Save Changes</Text>}
+                            <Pressable style={[accountStyles.actionButton, accountStyles.saveButton]} onPress={() => void saveProfileChanges()} accessibilityRole="button">
+                                {updating ? <ActivityIndicator color={theme.accentText} size="small" /> : <Text style={accountStyles.saveText}>Save Changes</Text>}
                             </Pressable>
                         </View>
                     </View>

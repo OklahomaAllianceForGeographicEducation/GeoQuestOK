@@ -117,3 +117,21 @@ export async function fetchTrailDetails(id: string) {
         landmarksGeojson: data.landmarks_geojson
     };
 }
+
+// OKAGE-facing: overwrite a trail's route/landmark geometry. Unlike
+// updateTrailInfo above, this deliberately touches the columns that drive
+// trail-unlock mileage math -- the RLS policy (trails_update_okage in
+// supabase/okage-role.sql) allows it at the row level already, so the only
+// guard is at the UI layer (components/TrailLandmarksEditor.tsx), which
+// warns staff before anything here gets called.
+export async function updateTrailGeojson(id: string, fields: { routeGeojson: any; landmarksGeojson: any }) {
+    const { error } = await supabase
+        .from('trails')
+        .update({
+            route_geojson: fields.routeGeojson,
+            landmarks_geojson: fields.landmarksGeojson,
+        })
+        .eq('id', id);
+
+    if (error) throw error;
+}

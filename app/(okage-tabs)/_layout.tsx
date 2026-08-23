@@ -26,6 +26,8 @@ import { ActivityIndicator, StyleSheet, View, useColorScheme } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '../../commonStyles';
+import OnboardingTour from '../../components/OnboardingTour';
+import TourTarget from '../../components/tour/TourTarget';
 import { useResponsive } from '../../hooks/useResponsive';
 import { getResolvedRole, resolveAppShellPath } from '../../lib/access';
 import { supabase } from '../../utils/supabase';
@@ -165,6 +167,10 @@ export default function OkageTabLayout() {
         // paddingTop: insets.top pushes all tab content down below the
         // status bar/notch so nothing is hidden behind it.
         <View style={{ flex: 1, backgroundColor: theme.background, paddingTop: insets.top, alignItems: isWideWeb ? 'center' : 'stretch' }}>
+          {/* This shell has no preview-mode concept of its own -- only
+              genuine OKAGE staff land here -- so `active` stays at its
+              default of true. */}
+          <OnboardingTour tourId="okage" ready={checked} />
           <View style={{ flex: 1, width: '100%', maxWidth: isWideWeb ? 1100 : undefined }}>
             <Tabs
                 screenOptions={{
@@ -203,7 +209,9 @@ export default function OkageTabLayout() {
                         // a common iOS/Android convention for showing
                         // selection state.
                         tabBarIcon: ({ color, focused }) => (
-                            <Ionicons name={focused ? 'home-sharp' : 'home-outline'} color={color} size={24} />
+                            <TourTarget id="okage.homeTab">
+                                <Ionicons name={focused ? 'home-sharp' : 'home-outline'} color={color} size={24} />
+                            </TourTarget>
                         ),
                     }}
                 />
@@ -212,7 +220,9 @@ export default function OkageTabLayout() {
                     options={{
                         title: 'Content',
                         tabBarIcon: ({ color, focused }) => (
-                            <Ionicons name={focused ? 'library-sharp' : 'library-outline'} color={color} size={24} />
+                            <TourTarget id="okage.contentTab">
+                                <Ionicons name={focused ? 'library-sharp' : 'library-outline'} color={color} size={24} />
+                            </TourTarget>
                         ),
                     }}
                 />
@@ -221,7 +231,9 @@ export default function OkageTabLayout() {
                     options={{
                         title: 'Quizzes',
                         tabBarIcon: ({ color, focused }) => (
-                            <Ionicons name={focused ? 'help-circle-sharp' : 'help-circle-outline'} color={color} size={24} />
+                            <TourTarget id="okage.quizzesTab">
+                                <Ionicons name={focused ? 'help-circle-sharp' : 'help-circle-outline'} color={color} size={24} />
+                            </TourTarget>
                         ),
                     }}
                 />
@@ -239,7 +251,9 @@ export default function OkageTabLayout() {
                     options={{
                         title: 'Reports',
                         tabBarIcon: ({ color, focused }) => (
-                            <Ionicons name={focused ? 'documents-sharp' : 'documents-outline'} color={color} size={24} />
+                            <TourTarget id="okage.reportsTab">
+                                <Ionicons name={focused ? 'documents-sharp' : 'documents-outline'} color={color} size={24} />
+                            </TourTarget>
                         ),
                     }}
                 />

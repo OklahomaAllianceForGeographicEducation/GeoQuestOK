@@ -4,7 +4,7 @@
 // filtering by "My Network" (everyone) or by a specific class the student
 // belongs to.
 import { useEffect, useState } from 'react';
-import { Text, View, ScrollView, Pressable, Alert, ActivityIndicator } from 'react-native';
+import { Text, View, ScrollView, Pressable, Alert, ActivityIndicator, useColorScheme } from 'react-native';
 
 // Expo's optimized Image component (better caching/performance for remote
 // images than React Native's built-in <Image>), used here for avatar
@@ -48,7 +48,8 @@ type ClassTab = {
 const MEDAL_COLORS = ['#DE9027', '#9E9E9E', '#C07B3A'];
 
 export default function LeaderboardScreen() {
-    const theme = colors['light'];
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
     // Generate the full style object for this screen based on the current
     // theme colors.
     const lStyles = getLeaderboardStyles(theme);
@@ -266,7 +267,7 @@ export default function LeaderboardScreen() {
     return (
         <ScrollView style={{ flex: 1, backgroundColor: theme.background }} contentContainerStyle={{ paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
             <View style={lStyles.header}>
-                <Text style={lStyles.headerTitle}>Leaderboard</Text>
+                <Text style={lStyles.headerTitle} accessibilityRole="header">Leaderboard</Text>
                 <Text style={lStyles.headerSubtitle}>See how you rank</Text>
             </View>
 
@@ -285,6 +286,15 @@ export default function LeaderboardScreen() {
                         // matches activeGroup.
                         style={[lStyles.tab, activeGroup === group.id && lStyles.tabActive]}
                         onPress={() => setActiveGroup(group.id)}
+                        accessibilityRole="tab"
+                        // Both accessibilityState and the flat aria-selected
+                        // prop are set: real React Native reads
+                        // accessibilityState, but this project's React
+                        // Native Web build only derives aria-* attributes
+                        // from the flat props, not from accessibilityState
+                        // (confirmed earlier this session -- see WebNav.tsx).
+                        accessibilityState={{ selected: activeGroup === group.id }}
+                        aria-selected={activeGroup === group.id}
                     >
                         <Text style={[lStyles.tabLabel, activeGroup === group.id && lStyles.tabLabelActive]}>
                             {group.label}

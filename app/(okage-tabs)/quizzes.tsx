@@ -14,10 +14,12 @@ import {
     StyleSheet,
     Text,
     TextInput,
+    useColorScheme,
     View,
 } from 'react-native';
-import { colors } from '../../commonStyles';
+import { colors, Theme } from '../../commonStyles';
 import StandardPickerModal from '../../components/StandardPickerModal';
+import TourTarget from '../../components/tour/TourTarget';
 import { LESSON_SUBJECTS } from '../../lib/curriculum';
 
 // geojsonPointsToLandmarks converts a trail's raw GeoJSON "point" features
@@ -49,6 +51,19 @@ const GRADE_BANDS: { value: GradeBand; label: string }[] = [
 // form needs to be reset — spreading creates a fresh independent copy each
 // time rather than reusing (and potentially accidentally mutating) the
 // same object.
+// react-native-web's Alert.alert() is a complete no-op (see
+// lib/confirmAlert.ts) — a plain info/error Alert.alert(...) call here
+// would silently do nothing on web. Same pattern used across the other
+// OKAGE tabs and app/(teacher-tabs)/curriculum.tsx.
+function showAlert(title: string, message: string) {
+    console.warn(`[ALERT] ${title}: ${message}`);
+    if (Platform.OS === 'web') {
+        alert(`${title}\n\n${message}`);
+    } else {
+        Alert.alert(title, message);
+    }
+}
+
 const EMPTY_FORM = {
     landmarkId: '',
     landmarkTitle: '',
@@ -65,7 +80,9 @@ const EMPTY_FORM = {
 };
 
 export default function OkageQuizzesScreen() {
-    const theme = colors.light;
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
+    const styles = getStyles(theme);
 
     const [loading, setLoading] = useState(true);
     const [trails, setTrails] = useState<TrailSummary[]>([]);
@@ -104,7 +121,7 @@ export default function OkageQuizzesScreen() {
                 // something.
                 if (list.length > 0) setSelectedTrailId(list[0].id);
             } catch (err: any) {
-                Alert.alert('Load Error', err.message || 'Could not load trails.');
+                showAlert('Load Error', err.message || 'Could not load trails.');
             } finally {
                 setLoading(false);
             }
@@ -143,7 +160,7 @@ export default function OkageQuizzesScreen() {
                 setLandmarks(geojsonPointsToLandmarks((details as any)?.landmarksGeojson));
                 setQuestions(questionList);
             } catch (err: any) {
-                Alert.alert('Load Error', err.message || 'Could not load this trail.');
+                showAlert('Load Error', err.message || 'Could not load this trail.');
             } finally {
                 setLandmarksLoading(false);
                 setQuestionsLoading(false);
@@ -210,11 +227,11 @@ export default function OkageQuizzesScreen() {
     async function handleSubmitForm() {
         if (!selectedTrailId) return;
         if (!form.landmarkId) {
-            Alert.alert('Pick a Landmark', 'Choose which landmark this question is tied to.');
+            showAlert('Pick a Landmark', 'Choose which landmark this question is tied to.');
             return;
         }
         if (!form.question.trim() || !form.correctAnswer.trim()) {
-            Alert.alert('Missing Info', 'Enter both the question and its correct answer.');
+            showAlert('Missing Info', 'Enter both the question and its correct answer.');
             return;
         }
         // Collapse the 3 separate wrong-answer fields back into one array,
@@ -225,7 +242,7 @@ export default function OkageQuizzesScreen() {
             .map((a) => a.trim())
             .filter((a) => a.length > 0);
         if (wrongAnswers.length === 0) {
-            Alert.alert('Missing Info', 'Enter at least one wrong answer choice.');
+            showAlert('Missing Info', 'Enter at least one wrong answer choice.');
             return;
         }
 
@@ -258,7 +275,7 @@ export default function OkageQuizzesScreen() {
             setQuestions(refreshed);
             setFormOpen(false);
         } catch (err: any) {
-            Alert.alert('Save Failed', err.message || 'Could not save this question.');
+            showAlert('Save Failed', err.message || 'Could not save this question.');
         } finally {
             setSaving(false);
         }
@@ -276,7 +293,7 @@ export default function OkageQuizzesScreen() {
             // rather than re-fetching the entire question list again.
             setQuestions((prev) => prev.map((q) => (q.id === question.id ? { ...q, isActive: !q.isActive } : q)));
         } catch (err: any) {
-            Alert.alert('Update Failed', err.message || 'Could not update this question.');
+            showAlert('Update Failed', err.message || 'Could not update this question.');
         } finally {
             setBusyQuestionId(null);
         }
@@ -294,7 +311,7 @@ export default function OkageQuizzesScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: theme.background }}>
             <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
                 <Text style={[styles.kicker, { color: theme.accent }]}>QUIZ EDITOR</Text>
-                <Text style={[styles.mainHeading, { color: theme.text }]}>Trail Quiz Questions</Text>
+                <Text style={[styles.mainHeading, { color: theme.text }]} accessibilityRole="header">Trail Quiz Questions</Text>
                 <Text style={[styles.introText, { color: theme.subtext }]}>
                     Pick a trail, then add or edit the questions tied to each landmark.
                 </Text>
@@ -302,16 +319,22 @@ export default function OkageQuizzesScreen() {
                 <Text style={[styles.sectionTitle, { color: theme.text }]}>Trail</Text>
                 {/* Trail-picker chip row. */}
                 <View style={styles.chipRow}>
-                    {trails.map((trail) => {
+                    {trails.map((trail, trailIndex) => {
                         const active = trail.id === selectedTrailId;
-                        return (
+                        const chip = (
                             <Pressable
-                                key={trail.id}
                                 style={[styles.chip, { borderColor: theme.border, backgroundColor: active ? theme.accent : theme.surface }]}
                                 onPress={() => setSelectedTrailId(trail.id)}
+                                accessibilityRole="radio"
+                                accessibilityState={{ checked: active }}
                             >
-                                <Text style={[styles.chipText, { color: active ? '#FFF' : theme.text }]}>{trail.name}</Text>
+                                <Text style={[styles.chipText, { color: active ? theme.accentText : theme.text }]}>{trail.name}</Text>
                             </Pressable>
+                        );
+                        return trailIndex === 0 ? (
+                            <TourTarget key={trail.id} id="okage.quizzesTrailChip">{chip}</TourTarget>
+                        ) : (
+                            <View key={trail.id}>{chip}</View>
                         );
                     })}
                 </View>
@@ -324,7 +347,7 @@ export default function OkageQuizzesScreen() {
                     <ActivityIndicator size="small" color={theme.accent} style={{ marginTop: 20 }} />
                 ) : landmarks.length === 0 ? (
                     <Text style={[styles.emptyText, { color: theme.subtext, marginTop: 16 }]}>
-                        This trail doesn't have landmark data yet, so questions can't be added here.
+                        This trail doesn’t have landmark data yet, so questions can’t be added here.
                     </Text>
                 ) : (
                     <>
@@ -335,9 +358,10 @@ export default function OkageQuizzesScreen() {
                             // Cancel button); if closed, it opens a fresh
                             // blank "add" form.
                             onPress={() => (formOpen ? setFormOpen(false) : openAddForm())}
+                            accessibilityRole="button"
                         >
-                            <Ionicons name={formOpen ? 'close' : 'add'} size={16} color={formOpen ? '#FFF' : theme.accent} />
-                            <Text style={[styles.addButtonText, { color: formOpen ? '#FFF' : theme.accent }]}>
+                            <Ionicons name={formOpen ? 'close' : 'add'} size={16} color={formOpen ? theme.accentText : theme.accent} />
+                            <Text style={[styles.addButtonText, { color: formOpen ? theme.accentText : theme.accent }]}>
                                 {formOpen ? 'Cancel' : 'Add Question'}
                             </Text>
                         </Pressable>
@@ -357,8 +381,10 @@ export default function OkageQuizzesScreen() {
                                                 key={l.id}
                                                 style={[styles.chipSmall, { borderColor: theme.border, backgroundColor: active ? theme.accent : theme.background }]}
                                                 onPress={() => setForm((prev) => ({ ...prev, landmarkId: l.id, landmarkTitle: l.title }))}
+                                                accessibilityRole="radio"
+                                                accessibilityState={{ checked: active }}
                                             >
-                                                <Text style={[styles.chipTextSmall, { color: active ? '#FFF' : theme.text }]}>{l.title}</Text>
+                                                <Text style={[styles.chipTextSmall, { color: active ? theme.accentText : theme.text }]}>{l.title}</Text>
                                             </Pressable>
                                         );
                                     })}
@@ -373,8 +399,10 @@ export default function OkageQuizzesScreen() {
                                                 key={band.value}
                                                 style={[styles.chipSmall, { borderColor: theme.border, backgroundColor: active ? theme.accent : theme.background }]}
                                                 onPress={() => setForm((prev) => ({ ...prev, gradeBand: band.value }))}
+                                                accessibilityRole="radio"
+                                                accessibilityState={{ checked: active }}
                                             >
-                                                <Text style={[styles.chipTextSmall, { color: active ? '#FFF' : theme.text }]}>{band.label}</Text>
+                                                <Text style={[styles.chipTextSmall, { color: active ? theme.accentText : theme.text }]}>{band.label}</Text>
                                             </Pressable>
                                         );
                                     })}
@@ -389,12 +417,14 @@ export default function OkageQuizzesScreen() {
                                                 key={subject.value}
                                                 style={[styles.chipSmall, { borderColor: theme.border, backgroundColor: active ? theme.accent : theme.background }]}
                                                 onPress={() => setForm((prev) => ({ ...prev, subject: subject.value }))}
+                                                accessibilityRole="radio"
+                                                accessibilityState={{ checked: active }}
                                             >
                                                 {/* Same "first word only"
                                                     trick seen in content.tsx,
                                                     to keep these subject
                                                     chips compact. */}
-                                                <Text style={[styles.chipTextSmall, { color: active ? '#FFF' : theme.text }]}>
+                                                <Text style={[styles.chipTextSmall, { color: active ? theme.accentText : theme.text }]}>
                                                     {subject.label.split(' ')[0]}
                                                 </Text>
                                             </Pressable>
@@ -412,7 +442,12 @@ export default function OkageQuizzesScreen() {
                                         placeholderTextColor={theme.subtext}
                                         autoCapitalize="characters"
                                     />
-                                    <Pressable style={[styles.browseButton, { borderColor: theme.accent }]} onPress={() => setStandardPickerOpen(true)}>
+                                    <Pressable
+                                        style={[styles.browseButton, { borderColor: theme.accent }]}
+                                        onPress={() => setStandardPickerOpen(true)}
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Browse standards library"
+                                    >
                                         <Ionicons name="search" size={16} color={theme.accent} />
                                     </Pressable>
                                 </View>
@@ -464,9 +499,11 @@ export default function OkageQuizzesScreen() {
                                     style={[styles.saveButton, { backgroundColor: theme.accent }]}
                                     disabled={saving}
                                     onPress={() => void handleSubmitForm()}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ disabled: saving, busy: saving }}
                                 >
-                                    {saving ? <ActivityIndicator color="#FFF" /> : (
-                                        <Text style={styles.saveButtonText}>{editingQuestionId ? 'Save Changes' : 'Add Question'}</Text>
+                                    {saving ? <ActivityIndicator color={theme.accentText} /> : (
+                                        <Text style={[styles.saveButtonText, { color: theme.accentText }]}>{editingQuestionId ? 'Save Changes' : 'Add Question'}</Text>
                                     )}
                                 </Pressable>
                             </View>
@@ -520,13 +557,21 @@ export default function OkageQuizzesScreen() {
                                             <Text style={[styles.questionText, { color: theme.text }]}>{question.question}</Text>
                                         </View>
                                         <View style={{ gap: 8, alignItems: 'flex-end' }}>
-                                            <Pressable style={[styles.iconButton, { borderColor: theme.border }]} onPress={() => openEditForm(question)}>
+                                            <Pressable
+                                                style={[styles.iconButton, { borderColor: theme.border }]}
+                                                onPress={() => openEditForm(question)}
+                                                accessibilityRole="button"
+                                                accessibilityLabel="Edit question"
+                                            >
                                                 <Ionicons name="create-outline" size={16} color={theme.accent} />
                                             </Pressable>
                                             <Pressable
                                                 style={[styles.iconButton, { borderColor: theme.border }]}
                                                 disabled={isBusy}
                                                 onPress={() => void handleToggleActive(question)}
+                                                accessibilityRole="switch"
+                                                accessibilityState={{ checked: question.isActive, busy: isBusy }}
+                                                accessibilityLabel={question.isActive ? 'Hide question from students' : 'Show question to students'}
                                             >
                                                 {isBusy ? (
                                                     <ActivityIndicator size="small" color={theme.accent} />
@@ -562,12 +607,12 @@ export default function OkageQuizzesScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     kicker: { fontSize: 11, letterSpacing: 1.2, fontWeight: '800', marginBottom: 6 },
     mainHeading: { fontSize: 24, fontWeight: '800', marginBottom: 4, fontFamily: 'Georgia' },
     introText: { fontSize: 14, lineHeight: 19, marginBottom: 16 },
-    sectionTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1, color: '#666', marginBottom: 10, marginTop: 10, textTransform: 'uppercase' },
+    sectionTitle: { fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 10, marginTop: 10, textTransform: 'uppercase' },
     emptyText: { fontSize: 13, fontStyle: 'italic' },
     chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
     chip: { borderWidth: 1, borderRadius: 16, paddingVertical: 8, paddingHorizontal: 14 },
@@ -578,9 +623,19 @@ const styles = StyleSheet.create({
     addButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderWidth: 1.5, borderRadius: 12, paddingVertical: 10, marginTop: 16 },
     addButtonText: { fontSize: 13, fontWeight: '700' },
 
-    formCard: { borderWidth: 1, borderRadius: 16, padding: 16, marginTop: 12 },
+    formCard: {
+        borderWidth: 1,
+        borderRadius: 16,
+        padding: 16,
+        marginTop: 12,
+        shadowColor: theme.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 6,
+        elevation: 2,
+    },
     formTitle: { fontSize: 15, fontWeight: '800', fontFamily: 'Georgia', marginBottom: 10 },
-    fieldLabel: { fontSize: 10, fontWeight: '800', color: '#666', letterSpacing: 0.6, marginBottom: 6, marginTop: 10 },
+    fieldLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6, marginBottom: 6, marginTop: 10 },
     textInput: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
     standardRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     browseButton: { borderWidth: 1.5, borderRadius: 10, padding: 10 },
@@ -589,7 +644,19 @@ const styles = StyleSheet.create({
     saveButtonText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
 
     landmarkHeading: { fontSize: 16, fontWeight: '800', fontFamily: 'Georgia', marginBottom: 8 },
-    questionCard: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 8 },
+    questionCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderRadius: 12,
+        padding: 14,
+        marginBottom: 8,
+        shadowColor: theme.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 6,
+        elevation: 2,
+    },
     questionMeta: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6, marginBottom: 4, textTransform: 'uppercase' },
     questionText: { fontSize: 14, fontWeight: '600', lineHeight: 19 },
     iconButton: { borderWidth: 1, borderRadius: 10, padding: 8 },

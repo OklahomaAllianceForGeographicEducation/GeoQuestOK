@@ -28,6 +28,7 @@ import {
     StyleSheet,
     Text,
     TextInput,
+    useColorScheme,
     useWindowDimensions,
     View
 } from 'react-native';
@@ -63,7 +64,8 @@ const CAROUSEL_SLIDES = [
 ];
 
 export default function LaunchIntroductionScreen() {
-    const theme = colors.light;
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
     const insets = useSafeAreaInsets();
     const router = useRouter();
     const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -228,7 +230,7 @@ export default function LaunchIntroductionScreen() {
                         {CAROUSEL_SLIDES.map((slide) => (
                             <View key={slide.id} style={[styles.slidePage, { width: frameWidth, paddingHorizontal: pagePaddingHorizontal, paddingTop: pageTopPadding }]}>
                                 {/* Static Top-anchored Icon Shield */}
-                                <View style={[styles.iconShield, { borderColor: theme.border, backgroundColor: theme.surface }]}>
+                                <View style={[styles.iconShield, { borderColor: theme.border, backgroundColor: theme.surface, shadowColor: theme.shadow }]}>
                                     <Ionicons name={slide.icon as any} size={36} color={theme.accent} />
                                 </View>
 
@@ -287,6 +289,7 @@ export default function LaunchIntroductionScreen() {
                         {
                             backgroundColor: theme.surface,
                             borderColor: theme.border,
+                            shadowColor: theme.shadow,
                             minHeight: bottomSheetMinHeight,
                             padding: bottomSheetPadding,
                             borderTopLeftRadius: bottomSheetRadius,
@@ -330,11 +333,7 @@ export default function LaunchIntroductionScreen() {
                         <TextInput
                             style={[styles.textInput, { borderColor: theme.border, backgroundColor: theme.background, color: theme.text }]}
                             placeholder="Email"
-                            // Hardcoded placeholder color (a muted tan/
-                            // brown) rather than theme.subtext — a small
-                            // inconsistency with how placeholderTextColor
-                            // is handled on other screens.
-                            placeholderTextColor="#A89880"
+                            placeholderTextColor={theme.subtext}
                             keyboardType="email-address"
                             autoCapitalize="none"
                             autoCorrect={false}
@@ -348,7 +347,7 @@ export default function LaunchIntroductionScreen() {
                         <TextInput
                             style={[styles.textInput, { borderColor: theme.border, backgroundColor: theme.background, color: theme.text }]}
                             placeholder="Password"
-                            placeholderTextColor="#A89880"
+                            placeholderTextColor={theme.subtext}
                             secureTextEntry
                             autoCapitalize="none"
                             textContentType="password"

@@ -6,10 +6,12 @@
 // A form for building/saving a brand-new custom trail (e.g. for a
 // professor's own class) directly into the "trails" table in Supabase.
 
+import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from 'react-native';
 import { colors } from '../commonStyles';
 import WebContainer from '../components/WebContainer';
+import { getResolvedRole, resolveAppShellPath } from '../lib/access';
 
 // TrailDifficulty is a union type of the allowed difficulty strings (e.g.
 // 'Easy' | 'Moderate' | ...) defined in lib/trails.ts. TrailSummary
@@ -55,7 +57,14 @@ function slugifyTrailName(name: string) {
 }
 
 export default function TrailBuilderScreen() {
-    const theme = colors.light;
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
+    const router = useRouter();
+
+    // Whether we've confirmed this viewer is actually OKAGE staff. Starts
+    // false so the real form never flashes on screen before the check
+    // resolves.
+    const [roleChecked, setRoleChecked] = useState(false);
 
     // Whether the initial list of existing trails is still loading.
     const [loading, setLoading] = useState(true);
@@ -79,7 +88,56 @@ export default function TrailBuilderScreen() {
     const [highlights, setHighlights] = useState('');
     const [historical, setHistorical] = useState('');
 
+    // Access guard, same pattern as app/(okage-tabs)/_layout.tsx's and
+    // data-hub.tsx's: this route sits directly under app/, unwrapped by
+    // any group layout, and previously had no access check at all. The
+    // form's actual save is correctly rejected server-side for anyone but
+    // OKAGE staff (RLS policy trails_update_okage in
+    // supabase/okage-role.sql requires app_role = 'okage' via WITH CHECK),
+    // so this isn't a data-integrity risk -- but a fully-built save form
+    // that only fails on submit, with no explanation why, is a bad
+    // experience for anyone who lands here without the role to use it.
     useEffect(() => {
+        let isMounted = true;
+
+        async function checkAccess() {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!isMounted) return;
+                if (!user) {
+                    router.replace('/' as any);
+                    return;
+                }
+
+                const { data: profile, error } = await supabase
+                    .from('profiles')
+                    .select('role, app_role, active_view')
+                    .eq('id', user.id)
+                    .single();
+
+                if (!isMounted) return;
+                if (error || !profile || getResolvedRole(profile) !== 'okage') {
+                    router.replace((profile ? resolveAppShellPath(profile) : '/') as any);
+                    return;
+                }
+
+                setRoleChecked(true);
+            } catch (err) {
+                console.error('Error verifying trail-builder access:', err);
+                if (isMounted) router.replace('/' as any);
+            }
+        }
+
+        checkAccess();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [router]);
+
+    useEffect(() => {
+        if (!roleChecked) return;
+
         let mounted = true;
 
         async function loadTrails() {
@@ -98,7 +156,7 @@ export default function TrailBuilderScreen() {
         return () => {
             mounted = false;
         };
-    }, []);
+    }, [roleChecked]);
 
     // useMemo recalculates `canSave` only when `miles` or `trailName`
     // change, rather than on every render — a boolean that's true only
@@ -179,7 +237,7 @@ export default function TrailBuilderScreen() {
         }
     };
 
-    if (loading) {
+    if (!roleChecked || loading) {
         return (
             <View style={[styles.centered, { backgroundColor: theme.background }]}>
                 <ActivityIndicator size="large" color={theme.accent} />
@@ -198,14 +256,14 @@ export default function TrailBuilderScreen() {
 
             <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <Text style={[styles.label, { color: theme.subtext }]}>Trail Name</Text>
-                <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} value={trailName} onChangeText={setTrailName} placeholder="e.g. Physical Geography Field Lab" />
+                <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.surface }]} value={trailName} onChangeText={setTrailName} placeholder="e.g. Physical Geography Field Lab" />
 
                 <Text style={[styles.label, { color: theme.subtext }]}>Miles</Text>
                 {/* "decimal-pad" shows a numeric keyboard that includes a
                     decimal point key (as opposed to "numeric", which is
                     whole numbers only), since trail mileage can be
                     fractional (e.g. 24.5). */}
-                <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border }]} value={miles} onChangeText={setMiles} keyboardType="decimal-pad" placeholder="e.g. 24" />
+                <TextInput style={[styles.input, { color: theme.text, borderColor: theme.border, backgroundColor: theme.surface }]} value={miles} onChangeText={setMiles} keyboardType="decimal-pad" placeholder="e.g. 24" />
 
                 <Text style={[styles.label, { color: theme.subtext }]}>Difficulty</Text>
                 <View style={styles.pillWrap}>
@@ -217,10 +275,14 @@ export default function TrailBuilderScreen() {
                             // single pill currently matches the selected
                             // difficulty; every other pill keeps its default
                             // white/gray look.
-                            style={[styles.pill, difficulty === item && { backgroundColor: theme.accent, borderColor: theme.accent }]}
+                            style={[
+                                styles.pill,
+                                { backgroundColor: theme.surface, borderColor: theme.border },
+                                difficulty === item && { backgroundColor: theme.accent, borderColor: theme.accent }
+                            ]}
                             onPress={() => setDifficulty(item)}
                         >
-                            <Text style={[styles.pillText, difficulty === item && { color: '#fff' }]}>{item}</Text>
+                            <Text style={[styles.pillText, { color: theme.text }, difficulty === item && { color: '#fff' }]}>{item}</Text>
                         </Pressable>
                     ))}
                 </View>
@@ -229,13 +291,13 @@ export default function TrailBuilderScreen() {
                 {/* multiline lets this TextInput grow to hold several
                     lines of text instead of scrolling horizontally like a
                     single-line field. */}
-                <TextInput style={[styles.input, styles.multiline, { color: theme.text, borderColor: theme.border }]} value={route} onChangeText={setRoute} placeholder="Guymon → Boise City → Kenton" multiline />
+                <TextInput style={[styles.input, styles.multiline, { color: theme.text, borderColor: theme.border, backgroundColor: theme.surface }]} value={route} onChangeText={setRoute} placeholder="Guymon → Boise City → Kenton" multiline />
 
                 <Text style={[styles.label, { color: theme.subtext }]}>Highlights</Text>
-                <TextInput style={[styles.input, styles.multiline, { color: theme.text, borderColor: theme.border }]} value={highlights} onChangeText={setHighlights} placeholder="Comma-separated landmarks or learning stops" multiline />
+                <TextInput style={[styles.input, styles.multiline, { color: theme.text, borderColor: theme.border, backgroundColor: theme.surface }]} value={highlights} onChangeText={setHighlights} placeholder="Comma-separated landmarks or learning stops" multiline />
 
                 <Text style={[styles.label, { color: theme.subtext }]}>Historical Focus</Text>
-                <TextInput style={[styles.input, styles.multiline, { color: theme.text, borderColor: theme.border }]} value={historical} onChangeText={setHistorical} placeholder="Dust Bowl, geology, statehood..." multiline />
+                <TextInput style={[styles.input, styles.multiline, { color: theme.text, borderColor: theme.border, backgroundColor: theme.surface }]} value={historical} onChangeText={setHistorical} placeholder="Dust Bowl, geology, statehood..." multiline />
 
                 <Pressable
                     // Grey background (#A5B4C7) when the form isn't valid
@@ -283,11 +345,6 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         paddingHorizontal: 14,
         paddingVertical: 12,
-        // Note: this background is hardcoded to white rather than pulled
-        // from `theme`, unlike most other colors on this screen — so these
-        // inputs would stay white even if this screen were ever switched
-        // to follow dark mode.
-        backgroundColor: '#fff',
         fontSize: 15,
         marginBottom: 10
     },
@@ -304,7 +361,6 @@ const styles = StyleSheet.create({
     pillWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
     pill: {
         borderWidth: 1,
-        borderColor: '#D1D1D6', // hardcoded light gray, not theme-driven
         // 999 is a common trick for "as rounded as possible" — since the
         // pill's actual height is much less than 999px, the corners end up
         // fully rounded into a capsule/pill shape rather than a rounded
@@ -312,9 +368,8 @@ const styles = StyleSheet.create({
         borderRadius: 999,
         paddingVertical: 8,
         paddingHorizontal: 12,
-        backgroundColor: '#fff'
     },
-    pillText: { fontSize: 12, fontWeight: '700', color: '#1C1C1E' },
+    pillText: { fontSize: 12, fontWeight: '700' },
     saveButton: { marginTop: 8, borderRadius: 14, paddingVertical: 14, alignItems: 'center' },
     saveButtonText: { color: '#fff', fontSize: 15, fontWeight: '800' },
     sectionTitle: { fontSize: 18, fontWeight: '800', fontFamily: 'Georgia', marginBottom: 12 },

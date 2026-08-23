@@ -20,12 +20,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 //   content can be taller than the visible screen).
 // - StyleSheet: builds style objects.
 // - Text / View: text and layout containers.
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 // Shared color palette (light/dark theme colors) defined once for the
 // whole app so screens stay visually consistent.
+import { useRouter } from 'expo-router';
 import { colors } from '../commonStyles';
 import WebContainer from '../components/WebContainer';
+import { getResolvedRole, resolveAppShellPath } from '../lib/access';
 
 // A helper function that formats a raw mileage number into a nicely
 // displayed string (e.g. rounding, adding "mi", etc.) — defined once in
@@ -52,9 +54,14 @@ type HubRow = {
 };
 
 export default function DataHubScreen() {
-    // Always use the "light" color theme for this screen (no automatic
-    // dark-mode switching here).
-    const theme = colors.light;
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
+    const router = useRouter();
+
+    // Whether we've confirmed this viewer is actually OKAGE staff. Starts
+    // false so the real content (a district-wide roster with names and
+    // roles) never even flashes on screen before the check resolves.
+    const [roleChecked, setRoleChecked] = useState(false);
 
     // Whether we're still waiting for the initial data fetch to complete.
     // Starts as `true` because we haven't loaded anything yet.
@@ -65,9 +72,65 @@ export default function DataHubScreen() {
     // array of HubRow objects.
     const [rows, setRows] = useState<HubRow[]>([]);
 
-    // Runs once when the screen first mounts (empty [] dependency array at
-    // the bottom) to kick off the data fetch.
+    // Access guard, same pattern as app/(okage-tabs)/_layout.tsx's: this
+    // screen must never render its real content for anyone who isn't
+    // OKAGE staff. Unlike the OKAGE tab group, this route has no shared
+    // layout of its own to hold that check -- it sits directly under
+    // app/, unwrapped by any group -- so previously it had none at all.
+    // The RLS policy backing the query below (profiles_select_same_district
+    // in supabase/fix-teacher-profile-read-access.sql) is intentionally
+    // broad -- built for the leaderboard feature, it lets ANY authenticated
+    // user, including a student, read every profile in their own district.
+    // With no route-level check, any signed-in user who found this URL
+    // could see a real district-wide roster (names, roles, mileage) meant
+    // for internal staff. Confirmed live during an /impeccable audit.
     useEffect(() => {
+        let isMounted = true;
+
+        async function checkAccess() {
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!isMounted) return;
+                if (!user) {
+                    router.replace('/' as any);
+                    return;
+                }
+
+                const { data: profile, error } = await supabase
+                    .from('profiles')
+                    .select('role, app_role, active_view')
+                    .eq('id', user.id)
+                    .single();
+
+                if (!isMounted) return;
+                if (error || !profile || getResolvedRole(profile) !== 'okage') {
+                    // Not OKAGE staff (or couldn't confirm) -- send them to
+                    // whichever shell they actually belong in rather than
+                    // rendering this on an unverified guess.
+                    router.replace((profile ? resolveAppShellPath(profile) : '/') as any);
+                    return;
+                }
+
+                setRoleChecked(true);
+            } catch (err) {
+                console.error('Error verifying data-hub access:', err);
+                if (isMounted) router.replace('/' as any);
+            }
+        }
+
+        checkAccess();
+
+        return () => {
+            isMounted = false;
+        };
+    }, [router]);
+
+    // Runs once access is confirmed to kick off the actual data fetch --
+    // gated on roleChecked so the broad query never fires for anyone who
+    // isn't verified OKAGE staff, not even for an instant.
+    useEffect(() => {
+        if (!roleChecked) return;
+
         // `mounted` is a manual guard flag. If the user navigates away
         // from this screen before the network request finishes, we don't
         // want to call setRows/setLoading on a component that no longer
@@ -119,7 +182,7 @@ export default function DataHubScreen() {
         return () => {
             mounted = false;
         };
-    }, []);
+    }, [roleChecked]);
 
     // useMemo recomputes this `summary` object only when `rows` changes
     // (not on every single re-render), which is a small performance
@@ -142,9 +205,9 @@ export default function DataHubScreen() {
         };
     }, [rows]);
 
-    // While the initial fetch is still running, show a full-screen loading
-    // spinner instead of the (currently empty) data.
-    if (loading) {
+    // While the access check or the initial fetch is still running, show a
+    // full-screen loading spinner instead of the (currently empty) data.
+    if (!roleChecked || loading) {
         return (
             <View style={[styles.centered, { backgroundColor: theme.background }]}>
                 {/* size="large" makes a bigger spinner than the default

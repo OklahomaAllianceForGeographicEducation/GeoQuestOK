@@ -87,3 +87,65 @@ export async function fetchFullLessonsForTrail(trailId: string): Promise<Map<str
     }
     return map;
 }
+
+// Creates or replaces the full lesson plan for one trail x grade tier x
+// subject slot — written by OKAGE staff from the Content tab. Mirrors
+// upsertLessonPlan's onConflict target in lib/curriculum.ts: the same
+// (trail_id, grade_tier, subject) triple is unique on this table too.
+export async function upsertFullLessonPlan(params: {
+    trailId: string;
+    gradeTier: GradeTier;
+    subject: LessonSubject;
+    title: string;
+    subtitle: string | null;
+    timeFrame: string | null;
+    appConnection: string;
+    purpose: string;
+    standards: LessonStandard[];
+    standardsNote: string | null;
+    objectives: string[];
+    materials: string[];
+    procedures: string[];
+    extension: string[];
+    assessment: string | null;
+}) {
+    const { error } = await supabase
+        .from('curriculum_full_lessons')
+        .upsert(
+            {
+                trail_id: params.trailId,
+                grade_tier: params.gradeTier,
+                subject: params.subject,
+                title: params.title,
+                subtitle: params.subtitle,
+                time_frame: params.timeFrame,
+                app_connection: params.appConnection,
+                purpose: params.purpose,
+                standards: params.standards,
+                standards_note: params.standardsNote,
+                objectives: params.objectives,
+                materials: params.materials,
+                procedures: params.procedures,
+                extension: params.extension,
+                assessment: params.assessment,
+                updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'trail_id,grade_tier,subject' }
+        );
+
+    if (error) throw error;
+}
+
+// Removes a full lesson plan entirely (e.g. it was written by mistake, or
+// the trail no longer needs one for this tier/subject) — the subject card
+// falls back to just showing its short lesson-guide blurb.
+export async function deleteFullLessonPlan(trailId: string, gradeTier: GradeTier, subject: LessonSubject) {
+    const { error } = await supabase
+        .from('curriculum_full_lessons')
+        .delete()
+        .eq('trail_id', trailId)
+        .eq('grade_tier', gradeTier)
+        .eq('subject', subject);
+
+    if (error) throw error;
+}

@@ -5,12 +5,27 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { colors } from '../../commonStyles';
-import Button from '../../components/Button';
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
+import { colors, Theme } from '../../commonStyles';
 import { signOutAndRedirect } from '../../lib/auth';
 import { confirmAlert } from '../../lib/confirmAlert';
+import { requestTourReplay } from '../../lib/onboarding';
 import { supabase } from '../../utils/supabase';
+
+// react-native-web's Alert.alert() is a complete no-op (see
+// lib/confirmAlert.ts) — a plain info/error Alert.alert(...) call here
+// would silently do nothing on web. Same pattern used across the other
+// OKAGE tabs and app/(teacher-tabs)/curriculum.tsx. confirmAlert (used
+// below for sign-out) is a separate, already-web-safe helper for the
+// two-button Cancel/Action pattern.
+function showAlert(title: string, message: string) {
+    console.warn(`[ALERT] ${title}: ${message}`);
+    if (Platform.OS === 'web') {
+        alert(`${title}\n\n${message}`);
+    } else {
+        Alert.alert(title, message);
+    }
+}
 
 // Shape of the subset of "profiles" table fields this screen cares about.
 type Profile = {
@@ -23,7 +38,9 @@ type Profile = {
 };
 
 export default function OkageAccountScreen() {
-    const theme = colors.light;
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
+    const styles = getStyles(theme);
     const router = useRouter();
 
     const [loading, setLoading] = useState(true);
@@ -64,7 +81,7 @@ export default function OkageAccountScreen() {
                 setNameDraft(data.display_name || data.username || '');
             }
         } catch (err: any) {
-            Alert.alert('Load Error', err.message || 'Could not load your profile.');
+            showAlert('Load Error', err.message || 'Could not load your profile.');
         } finally {
             setLoading(false);
         }
@@ -86,9 +103,9 @@ export default function OkageAccountScreen() {
             // is a defensive pattern: only spread/update `prev` if it's
             // not null; if profile somehow hasn't loaded yet, leave it as-is.
             setProfile((prev) => (prev ? { ...prev, display_name: nameDraft.trim() } : prev));
-            Alert.alert('Saved', 'Your name has been updated.');
+            showAlert('Saved', 'Your name has been updated.');
         } catch (err: any) {
-            Alert.alert('Save Failed', err.message || 'Could not save your name.');
+            showAlert('Save Failed', err.message || 'Could not save your name.');
         } finally {
             setSavingName(false);
         }
@@ -126,7 +143,7 @@ export default function OkageAccountScreen() {
             // falling back to the current profile's own value if
             // previousView was somehow undefined.
             setProfile((prev) => (prev ? { ...prev, active_view: previousView || prev.active_view } : prev));
-            Alert.alert('View Switch Failed', err.message || 'Could not switch views.');
+            showAlert('View Switch Failed', err.message || 'Could not switch views.');
         }
     }
 
@@ -165,7 +182,7 @@ export default function OkageAccountScreen() {
                             support custom avatar images. */}
                         <Ionicons name="person-circle-outline" size={54} color={theme.accent} />
                     </View>
-                    <Text style={[styles.greeting, { color: theme.text }]}>
+                    <Text style={[styles.greeting, { color: theme.text }]} accessibilityRole="header">
                         Welcome back, {profile?.display_name || profile?.username || 'OKAGE Staff'}
                     </Text>
                     <Text style={[styles.subtext, { color: theme.subtext }]}>OKAGE Content Team</Text>
@@ -190,6 +207,8 @@ export default function OkageAccountScreen() {
                         // otherwise warn about "a Promise passed where void
                         // was expected" for an onPress handler).
                         onPress={() => void handleSaveName()}
+                        accessibilityRole="button"
+                        accessibilityState={{ disabled: savingName, busy: savingName }}
                     >
                         {savingName ? (
                             <ActivityIndicator size="small" color={theme.accent} />
@@ -207,29 +226,56 @@ export default function OkageAccountScreen() {
                         See your content changes the way teachers and students will see them.
                     </Text>
                     <View style={styles.segmentedBar}>
-                        <Pressable style={[styles.segmentToggle, { borderColor: theme.border }]} onPress={() => void handleToggleAppView('teacher')}>
+                        <Pressable
+                            style={[styles.segmentToggle, { borderColor: theme.border }]}
+                            onPress={() => void handleToggleAppView('teacher')}
+                            accessibilityRole="button"
+                        >
                             <Ionicons name="briefcase-outline" size={16} color={theme.accent} />
                             <Text style={[styles.segmentLabel, { color: theme.text }]}>View as Teacher</Text>
                         </Pressable>
-                        <Pressable style={[styles.segmentToggle, { borderColor: theme.border }]} onPress={() => void handleToggleAppView('classic')}>
+                        <Pressable
+                            style={[styles.segmentToggle, { borderColor: theme.border }]}
+                            onPress={() => void handleToggleAppView('classic')}
+                            accessibilityRole="button"
+                        >
                             <Ionicons name="walk-outline" size={16} color={theme.accent} />
                             <Text style={[styles.segmentLabel, { color: theme.text }]}>View as Student</Text>
                         </Pressable>
                     </View>
                 </View>
 
-                {/* Sign-out button, styled with a custom red background via
-                    the `style` override prop (overriding Button's default
-                    accent-color background — see components/Button.tsx for
-                    how that override mechanism works). #FF3B30 is the
-                    standard iOS "destructive red" color. */}
-                <Button label="Sign Out Account" onPress={handleSignOut} style={{ backgroundColor: '#FF3B30', marginTop: 6 }} />
+                {/* Previously a full-width Button with a custom #FF3B30
+                    background -- the same accidental-tap risk (equal
+                    visual weight to the primary actions above it) and the
+                    same failing contrast (3.55:1 as white-on-fill text,
+                    confirmed live) already fixed on the student and
+                    teacher account screens' equivalent. This screen was
+                    unreachable until an OKAGE test account existed, so it
+                    missed that pass; same fix applied now: a small
+                    outlined pill using the shared theme.error token
+                    (#D70015, 4.72:1) instead. */}
+                <Pressable
+                    onPress={() => requestTourReplay('okage')}
+                    style={{ alignSelf: 'center', marginTop: 6, paddingVertical: 13, paddingHorizontal: 18, borderRadius: 10, borderWidth: 1, borderColor: theme.accent }}
+                    accessibilityRole="button"
+                >
+                    <Text style={{ color: theme.accent, fontWeight: '600', fontSize: 14 }}>Replay Tour</Text>
+                </Pressable>
+
+                <Pressable
+                    onPress={handleSignOut}
+                    style={{ alignSelf: 'center', marginTop: 10, paddingVertical: 13, paddingHorizontal: 18, borderRadius: 10, borderWidth: 1, borderColor: theme.error }}
+                    accessibilityRole="button"
+                >
+                    <Text style={{ color: theme.error, fontWeight: '600', fontSize: 14 }}>Sign Out Account</Text>
+                </Pressable>
             </ScrollView>
         </View>
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     heroSection: { alignItems: 'center', marginBottom: 24 },
     avatarCircle: {
@@ -246,7 +292,17 @@ const styles = StyleSheet.create({
     greeting: { fontSize: 18, fontWeight: '800', fontFamily: 'Georgia', textAlign: 'center' },
     subtext: { fontSize: 12.5, marginTop: 3 },
 
-    card: { borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 16 },
+    card: {
+        borderWidth: 1,
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 16,
+        shadowColor: theme.shadow,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 6,
+        elevation: 2,
+    },
     cardTitle: { fontSize: 15, fontWeight: '800', marginBottom: 6 },
     cardDescription: { fontSize: 12.5, lineHeight: 17, marginBottom: 12 },
     textInput: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, marginBottom: 10 },

@@ -18,7 +18,7 @@ import { AuthChangeEvent, Session } from '@supabase/supabase-js';
 // "useRouter" is a hook that gives us an object with navigation methods
 // like .replace() and .push() so we can move the user between screens from
 // code (not just by tapping a Link).
-import { Slot, useRouter } from 'expo-router';
+import { Slot, useRouter, usePathname } from 'expo-router';
 
 // "useEffect" is a React hook that runs a function after the component
 // renders, and optionally again whenever specified values change. Here it's
@@ -39,6 +39,11 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 // any screen.
 import BadgeUnlockProvider from '../components/BadgeUnlockProvider';
 
+// Registry that lets any screen's control mark itself as a guided-tour
+// target and lets OnboardingTour (components/OnboardingTour.tsx) find and
+// spotlight it. Mounted once here so ids are unique app-wide, not per shell.
+import { TourTargetsProvider } from '../lib/tourTargets';
+
 // Our configured Supabase client (from utils/supabase.js) — this is the
 // object used to talk to the Supabase backend (auth, database, etc.).
 import { supabase } from '../utils/supabase';
@@ -49,6 +54,14 @@ export default function RootLayout() {
   // Grab the navigation object so we can redirect the user based on their
   // login/role status.
   const router = useRouter();
+  // The URL the app actually loaded on. The effect below only runs once
+  // (empty dependency array), so it closes over whatever this was on the
+  // very first render -- exactly what's needed for "what page did the
+  // user actually load," since that's also roughly when INITIAL_SESSION
+  // fires. Deliberately not added to the effect's dependency array: doing
+  // so would re-subscribe the auth listener on every navigation, which
+  // "run once at startup" isn't supposed to do.
+  const initialPathname = usePathname();
 
   // useEffect with an empty dependency array ([] at the very end) runs its
   // function exactly once, right after this component first mounts (i.e.
@@ -62,32 +75,55 @@ export default function RootLayout() {
     // We destructure `{ data: { subscription } }` to reach directly into
     // that nested `subscription` object.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event: AuthChangeEvent, session: Session | null) => {
-      // TEMP DIAGNOSTIC LOGGING -- logs every event this listener receives,
-      // even ones the guard below ignores, so we can see exactly what
-      // Supabase fires around a sign-out/sign-up instead of guessing.
-      console.log('[authStateChange]', event, 'session user:', session?.user?.id ?? null);
+      // Only navigate on events that represent an actual sign-in/sign-out/
+      // recovery transition. Supabase also fires this callback for
+      // TOKEN_REFRESHED (a periodic background timer, unrelated to
+      // navigation intent) and USER_UPDATED -- both carry a non-null
+      // session, so without this guard they'd trigger the exact same
+      // role-based redirect below. That's how a sign-out could get
+      // silently undone: a refresh timer scheduled against the OLD
+      // session firing moments after signOut(), delivering a
+      // stale-but-non-null session snapshot that forces a redirect
+      // straight back into the app right after the explicit logout
+      // navigation.
+      if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT' && event !== 'INITIAL_SESSION' && event !== 'PASSWORD_RECOVERY') {
+        return;
+      }
 
-      // Only navigate on events that represent an actual sign-in/sign-out
-      // transition. Supabase also fires this callback for TOKEN_REFRESHED
-      // (a periodic background timer, unrelated to navigation intent) and
-      // USER_UPDATED -- both carry a non-null session, so without this
-      // guard they'd trigger the exact same role-based redirect below.
-      // That's how a sign-out could get silently undone: a refresh timer
-      // scheduled against the OLD session firing moments after signOut(),
-      // delivering a stale-but-non-null session snapshot that forces a
-      // redirect straight back into the app right after the explicit
-      // logout navigation.
-      if (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT' && event !== 'INITIAL_SESSION') {
+      // Clicking a password-reset email link establishes a session AND
+      // fires this event before SIGNED_IN would. Without special-casing
+      // it here, the role-based redirect below would immediately whisk
+      // the user into their dashboard instead of letting them set a new
+      // password on /reset-password.
+      if (event === 'PASSWORD_RECOVERY') {
+        router.replace('/reset-password');
         return;
       }
 
       // `session` is either null (nobody logged in) or an object
       // containing the logged-in user's info and auth tokens.
 
+      // On a fresh page load with an existing session, Supabase fires
+      // INITIAL_SESSION -- and until this fix, the code below redirected
+      // to the role's default screen unconditionally, no matter which URL
+      // was actually requested. That meant bookmarking, refreshing, or
+      // sharing a link to ANY authenticated screen (not just the launch
+      // page) silently bounced back to the default dashboard every time --
+      // confirmed live across three unrelated screens during an
+      // /impeccable audit. This only needs to run on a real sign-in
+      // transition, or on INITIAL_SESSION when the user landed on a
+      // generic pre-auth page that doesn't know where to send them yet;
+      // any other URL is one the user (or a bookmark/link) specifically
+      // asked for, and the screen itself is responsible for its own access
+      // control (see data-hub.tsx/trail-builder.tsx for the per-screen
+      // half of that).
+      const isGenericLandingPage = initialPathname === '/' || initialPathname === '/login' || initialPathname === '/signup';
+      const shouldRouteByRole = event === 'SIGNED_IN' || (event === 'INITIAL_SESSION' && isGenericLandingPage);
+
       // "session?.user" uses optional chaining: if `session` is null, the
       // whole expression short-circuits to `undefined` instead of
       // throwing an error trying to read `.user` off of null.
-      if (session?.user) {
+      if (session?.user && shouldRouteByRole) {
         try {
           // Look up this user's profile row in the "profiles" table to
           // find out what role they have (student / okage / teacher),
@@ -111,9 +147,18 @@ export default function RootLayout() {
             // TypeScript's generated route types don't recognize this
             // path — a workaround rather than an ideal fix.
             router.replace('/(okage-tabs)' as any);
+          } else if (profile?.app_role === 'admin') {
+            // District Administrators land on their own dedicated
+            // reporting shell, not the teacher portal.
+            router.replace('/(admin-tabs)' as any);
+          } else if (profile?.app_role === 'site_admin') {
+            // Site Administrators (building-level principals) get a
+            // separate shell from District Administrators -- see
+            // lib/access.ts's resolveAppShellPath for why.
+            router.replace('/(site-admin-tabs)' as any);
           } else {
-            // Anyone who isn't a student or okage falls through to the
-            // teacher section by default.
+            // Anyone who isn't a student, okage, or admin falls through to
+            // the teacher section by default.
             router.replace('/(teacher-tabs)');
           }
         } catch (err) {
@@ -160,10 +205,12 @@ export default function RootLayout() {
         {/* BadgeUnlockProvider wraps every screen so its badge-unlock popup
             can appear regardless of which screen is currently showing. */}
         <BadgeUnlockProvider>
-          {/* Slot renders whatever child route currently matches the URL —
-              this is where every actual screen in the app ultimately gets
-              displayed. */}
-          <Slot />
+          <TourTargetsProvider>
+            {/* Slot renders whatever child route currently matches the URL
+                — this is where every actual screen in the app ultimately
+                gets displayed. */}
+            <Slot />
+          </TourTargetsProvider>
         </BadgeUnlockProvider>
       </GestureHandlerRootView>
     </SafeAreaProvider>

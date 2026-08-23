@@ -1,6 +1,6 @@
 // lib/auth.ts
 // Shared sign-out helper used by every "Sign Out" button in the app
-// (teacher, student, and OKAGE account screens).
+// (teacher, student, admin, site admin, and OKAGE account screens).
 //
 // This clears the LOCAL session first (scope: 'local' -- just wipes the
 // on-device/browser storage, no network round trip) and navigates away
@@ -19,9 +19,36 @@
 // local storage first (fast, not network-dependent) means that window
 // effectively no longer exists: by the time a refresh could happen,
 // there's nothing left in storage to resume.
+//
+// stopAutoRefresh() below closes a second, related hole in that same
+// fix: utils/supabase.js configures `autoRefreshToken: true`, which
+// schedules a background timer to refresh the access token before it
+// expires. `scope: 'local'` sign-out clears storage but does NOT cancel
+// that already-scheduled timer, and -- unlike a global sign-out -- does
+// NOT revoke the refresh token server-side either. If that timer fires
+// after local storage is cleared but before the background global
+// sign-out below has finished revoking it, the refresh call still
+// succeeds (the old refresh token is still valid server-side) and writes
+// a brand new, fully valid session straight back into local storage --
+// silently reviving the account that just "signed out." The next
+// redirect or page reload then reads that revived session and routes the
+// user right back into their portal, which is exactly the "sign out sent
+// me back into the app, and reloading froze" failure reported live on
+// the District Admin account screen. Stopping the timer BEFORE clearing
+// storage closes the window completely: nothing is left scheduled that
+// could ever write a session back in.
 import { supabase } from '../utils/supabase';
 
 export async function signOutAndRedirect(router: { replace: (href: any) => void }): Promise<void> {
+    // Cancel any pending/scheduled token-refresh timer first -- see the
+    // comment above for why this has to happen before local sign-out, not
+    // after.
+    try {
+        supabase.auth.stopAutoRefresh();
+    } catch (err) {
+        console.warn('[signOutAndRedirect] stopAutoRefresh failed:', err);
+    }
+
     try {
         await supabase.auth.signOut({ scope: 'local' });
     } catch (err) {

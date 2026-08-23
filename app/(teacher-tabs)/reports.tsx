@@ -33,9 +33,11 @@ import {
     ScrollView,
     StyleSheet,
     Text,
+    useColorScheme,
     View
 } from 'react-native';
-import { colors } from '../../commonStyles';
+import { colors, Theme } from '../../commonStyles';
+import TourTarget from '../../components/tour/TourTarget';
 import {
     ActivityLogEntry,
     fetchClassFitnessSummary,
@@ -83,8 +85,8 @@ function CollapsibleSection({
 }) {
     return (
         <View style={{ marginTop: 14 }}>
-            <Pressable style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }} onPress={onToggle}>
-                <Text style={styles.detailHeading}>{expanded ? '▾' : '▸'} {title}</Text>
+            <Pressable style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }} onPress={onToggle} accessibilityRole="button" accessibilityState={{ expanded }} aria-expanded={expanded}>
+                <Text style={[getStyles(theme).detailHeading, { color: theme.subtext }]}>{expanded ? '▾' : '▸'} {title}</Text>
                 {!expanded && <Text style={{ fontSize: 11, color: theme.subtext }}>{summary}</Text>}
             </Pressable>
             {expanded && <View style={{ marginTop: 6 }}>{children}</View>}
@@ -146,7 +148,9 @@ type ClassBreakdownRow = {
 };
 
 export default function SchoolReportsScreen() {
-    const theme = colors.light;
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
+    const styles = getStyles(theme);
 
     const [loading, setLoading] = useState(true);
     // Whether the pull-to-refresh gesture is currently active.
@@ -549,9 +553,9 @@ export default function SchoolReportsScreen() {
             // app/login.tsx's showAlert helper, just written inline here
             // instead of as a separate reusable function.
             if (Platform.OS === 'web') {
-                window.alert(`Error synchronizing data: ${error.message}`);
+                window.alert(`Could not load reports: ${error.message}`);
             } else {
-                Alert.alert('Synchronization Fault', error.message);
+                Alert.alert('Could Not Load Reports', error.message);
             }
         } finally {
             setLoading(false);
@@ -744,8 +748,8 @@ export default function SchoolReportsScreen() {
                 refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.accent]} />}
                 showsVerticalScrollIndicator={false}
             >
-                <Text style={[styles.kicker, { color: theme.accent }]}>DATA VERIFICATION HUB</Text>
-                <Text style={[styles.title, { color: theme.text }]}>{schoolName}</Text>
+                <Text style={[styles.kicker, { color: theme.accent }]}>MY REPORTS</Text>
+                <Text style={[styles.title, { color: theme.text }]} accessibilityRole="header">{schoolName}</Text>
                 <Text style={[styles.subtitle, { color: theme.subtext }]}>{districtName}</Text>
 
                 {/* Segmented Controls */}
@@ -760,8 +764,11 @@ export default function SchoolReportsScreen() {
                             key={tab}
                             style={[styles.tabButton, activeTab === tab && { backgroundColor: theme.accent }]}
                             onPress={() => setActiveTab(tab)}
+                            accessibilityRole="tab"
+                            accessibilityState={{ selected: activeTab === tab }}
+                            aria-selected={activeTab === tab}
                         >
-                            <Text style={[styles.tabButtonText, activeTab === tab ? { color: '#fff', fontWeight: '700' } : { color: theme.text }]}>
+                            <Text style={[styles.tabButtonText, activeTab === tab ? { color: theme.accentText, fontWeight: '700' } : { color: theme.text }]}>
                                 {/* Each of these three lines only renders
                                     if `tab` matches — since JSX renders
                                     `false` as nothing, only exactly one of
@@ -781,7 +788,7 @@ export default function SchoolReportsScreen() {
                 {/* TAB VIEW A: MY STUDENTS */}
                 {activeTab === 'classes' && (
                     <View>
-                        <Text style={styles.sectionHeading}>MY CLASSES</Text>
+                        <Text style={styles.sectionHeading} accessibilityRole="header">MY CLASSES</Text>
                         {classBreakdown.length === 0 ? (
                             <Text style={styles.emptyText}>You haven&apos;t created any classes yet — set one up from the Classes tab.</Text>
                         ) : (
@@ -792,6 +799,9 @@ export default function SchoolReportsScreen() {
                                         <Pressable
                                             style={[styles.aggregateRow, { borderBottomColor: theme.border }]}
                                             onPress={() => void toggleClassExpanded(c.id)}
+                                            accessibilityRole="button"
+                                            accessibilityState={{ expanded: isExpanded }}
+                                            aria-expanded={isExpanded}
                                         >
                                             <View style={{ flex: 1, paddingRight: 8 }}>
                                                 <Text style={[styles.rowTitle, { color: theme.text }]}>
@@ -820,7 +830,7 @@ export default function SchoolReportsScreen() {
 
                                                         return (
                                                             <View key={student.id} style={[styles.studentCard, { borderColor: theme.border, backgroundColor: theme.surface }]}>
-                                                                <Pressable style={styles.studentHeader} onPress={() => void toggleStudentExpanded(student.id)}>
+                                                                <Pressable style={styles.studentHeader} onPress={() => void toggleStudentExpanded(student.id)} accessibilityRole="button" accessibilityState={{ expanded: isStudentExpanded }} aria-expanded={isStudentExpanded}>
                                                                     <View>
                                                                         <Text style={[styles.studentName, { color: theme.text }]}>
                                                                             {isStudentExpanded ? '▾' : '▸'} {student.display_name || student.username || 'Anonymous'}
@@ -932,20 +942,23 @@ export default function SchoolReportsScreen() {
                             })
                         )}
 
-                        <Pressable
-                            style={({ pressed }) => [styles.exportButton, { backgroundColor: theme.accent, opacity: pressed || exporting ? 0.8 : 1, marginTop: 24 }]}
-                            onPress={() => void handleExportPDF()}
-                            disabled={exporting}
-                        >
-                            <Text style={styles.exportButtonText}>{exporting ? 'Generating Print File...' : 'Export Grade Summary PDF'}</Text>
-                        </Pressable>
+                        <TourTarget id="teacher.exportButton">
+                            <Pressable
+                                style={({ pressed }) => [styles.exportButton, { backgroundColor: theme.accent, opacity: pressed || exporting ? 0.8 : 1, marginTop: 24 }]}
+                                onPress={() => void handleExportPDF()}
+                                disabled={exporting}
+                                accessibilityRole="button"
+                            >
+                                <Text style={styles.exportButtonText}>{exporting ? 'Generating Print File...' : 'Export Grade Summary PDF'}</Text>
+                            </Pressable>
+                        </TourTarget>
                     </View>
                 )}
 
                 {/* TAB VIEW B: OUR SCHOOL */}
                 {activeTab === 'school' && (
                     <View>
-                        <Text style={styles.sectionHeading}>CAMPUS PARTICIPATION VOLUMES</Text>
+                        <Text style={styles.sectionHeading} accessibilityRole="header">MY SCHOOL&apos;S ACTIVITY</Text>
                         {!schoolAssigned ? (
                             <Text style={styles.emptyText}>
                                 Your profile doesn&apos;t have a school building set yet — add one from Account Settings to see campus-wide totals.
@@ -966,7 +979,7 @@ export default function SchoolReportsScreen() {
                             </View>
                         ))}
 
-                        <Text style={[styles.sectionHeading, { marginTop: 28 }]}>TEACHING STAFF AT YOUR SCHOOL</Text>
+                        <Text style={[styles.sectionHeading, { marginTop: 28 }]} accessibilityRole="header">TEACHING STAFF AT YOUR SCHOOL</Text>
                         {!schoolAssigned ? null : colleagueRows.length === 0 ? (
                             <Text style={styles.emptyText}>No other teachers or admins registered at your school yet.</Text>
                         ) : (
@@ -987,9 +1000,9 @@ export default function SchoolReportsScreen() {
                 {/* TAB VIEW C: DISTRICT MAP */}
                 {activeTab === 'district' && (
                     <View>
-                        <Text style={styles.sectionHeading}>DISTRICT CAMPUS RUN-DOWNS</Text>
+                        <Text style={styles.sectionHeading} accessibilityRole="header">DISTRICT SCHOOLS</Text>
                         {districtAggregates.length === 0 ? (
-                            <Text style={styles.emptyText}>No registered properties configured inside your active school district lookup registry.</Text>
+                            <Text style={styles.emptyText}>No schools found for your district yet.</Text>
                         ) : (
                             districtAggregates.map((school, idx) => (
                                 <View
@@ -1043,34 +1056,34 @@ export default function SchoolReportsScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     container: { flex: 1 },
     kicker: { fontSize: 11, letterSpacing: 1.2, fontWeight: '800', marginBottom: 6 },
     title: { fontSize: 26, fontWeight: '800', marginBottom: 4, fontFamily: 'Georgia' },
     subtitle: { fontSize: 14, marginBottom: 20 },
-    // The classic iOS "segmented control" look: a light gray (#E5E5EA)
-    // pill-shaped background container, with individual buttons inside it
-    // that get a solid accent-color background when active.
-    tabContainer: { flexDirection: 'row', gap: 6, backgroundColor: '#E5E5EA', padding: 4, borderRadius: 12, marginBottom: 20 },
+    // The classic iOS "segmented control" look: a pill-shaped background
+    // container, with individual buttons inside it that get a solid
+    // accent-color background when active.
+    tabContainer: { flexDirection: 'row', gap: 6, backgroundColor: theme.border, padding: 4, borderRadius: 12, marginBottom: 20 },
     // flex: 1 on each tab button makes the 3 tabs split the row evenly.
     tabButton: { flex: 1, paddingVertical: 10, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
     tabButtonText: { fontSize: 12, fontWeight: '600' },
-    sectionHeading: { fontSize: 11, letterSpacing: 1, fontWeight: '800', color: '#666', marginBottom: 12, marginTop: 4 },
+    sectionHeading: { fontSize: 11, letterSpacing: 1, fontWeight: '800', color: theme.subtext, marginBottom: 12, marginTop: 4 },
     // A light-blue callout box styling for the "🔒 privacy" disclaimer
     // text — background/text colors chosen to look like an informational
     // banner rather than a warning.
     exportButton: { paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginBottom: 20 },
-    exportButtonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
-    emptyText: { color: '#666', fontSize: 14, fontStyle: 'italic', textAlign: 'center', marginTop: 20 },
+    exportButtonText: { color: theme.accentText, fontSize: 15, fontWeight: '700' },
+    emptyText: { color: theme.subtext, fontSize: 14, fontStyle: 'italic', textAlign: 'center', marginTop: 20 },
     studentCard: { padding: 16, borderWidth: 1, borderRadius: 14, marginBottom: 10 },
     studentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     studentName: { fontSize: 16, fontWeight: '600' },
     studentMiles: { fontSize: 18, fontWeight: '700', fontFamily: 'Georgia' },
     aggregateRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1 },
     rowTitle: { fontSize: 15, fontWeight: '600' },
-    rowStat: { fontSize: 16, fontWeight: '700', color: '#333' },
-    detailHeading: { fontSize: 10, letterSpacing: 1, fontWeight: '800', color: '#999', marginBottom: 6 },
-    detailEmptyText: { fontSize: 12, color: '#999', fontStyle: 'italic' },
+    rowStat: { fontSize: 16, fontWeight: '700', color: theme.text },
+    detailHeading: { fontSize: 10, letterSpacing: 1, fontWeight: '800', color: theme.subtext, marginBottom: 6 },
+    detailEmptyText: { fontSize: 12, color: theme.subtext, fontStyle: 'italic' },
     detailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
 });

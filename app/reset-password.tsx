@@ -13,23 +13,30 @@ import React, { useState } from 'react';
 // "Text" = required wrapper for any visible text.
 // "TextInput" = an editable text box the user can type into.
 // "Alert" = shows a native popup dialog with a title/message/buttons.
+// "Platform" = lets us branch logic based on which OS the app is running
+// on -- needed here because RN's Alert.alert() is a silent no-op on web.
 // "StyleSheet" = builds style objects.
-import { View, Text, TextInput, Alert, StyleSheet } from 'react-native';
+import { View, Text, TextInput, Pressable, Alert, Platform, StyleSheet, useColorScheme } from 'react-native';
 
 // Our shared Supabase client, used to talk to the backend/auth system.
 import { supabase } from '../utils/supabase';
 
 // Navigation hook, used here to send the user back to the home/root screen
-// once their password is updated.
-import { useRouter } from 'expo-router';
+// once their password is updated. Link gives this screen an escape hatch
+// back to /login for anyone who arrived via an old/expired reset link.
+import { useRouter, Link } from 'expo-router';
 
 // The shared Button component (note: this imports the one in
 // components/Button.tsx, a *different* file from app/Button.tsx seen
 // earlier — the app has two near-duplicate Button components).
 import Button from '../components/Button';
 import WebContainer from '../components/WebContainer';
+import { colors, Theme } from '../commonStyles';
 
 export default function ResetPassword() {
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
+    const styles = getStyles(theme);
     // `newPassword` holds whatever the user has typed so far.
     // `setNewPassword` is the function used to update it — calling it
     // triggers React to re-render this component with the new value.
@@ -46,8 +53,25 @@ export default function ResetPassword() {
     // double-tapping "Update" while it's already in progress.
     const [loading, setLoading] = useState(false);
 
+    // Inline replacement for what used to be an Alert.alert() on every
+    // validation failure — shown near the fields instead of an OS dialog.
+    const [formError, setFormError] = useState<string | null>(null);
+
     // Grabs the router so we can navigate the user away after success.
     const router = useRouter();
+
+    // Same web-vs-native alert helper as app/login.tsx and app/signup.tsx.
+    // Matters here specifically because RN's Alert.alert() is a silent
+    // no-op on react-native-web -- without this, a successful password
+    // reset on web (the app's primary classroom surface) showed zero
+    // confirmation before redirecting.
+    const showAlert = (title: string, message: string) => {
+        if (Platform.OS === 'web') {
+            alert(`${title}\n\n${message}`);
+        } else {
+            Alert.alert(title, message);
+        }
+    };
 
     // Commit the new password to Supabase and return the user to the app.
     // "async function" means this function can use "await" inside it to
@@ -57,21 +81,26 @@ export default function ResetPassword() {
         // minimum password length, but checking here first avoids an
         // unnecessary network round-trip and gives the user faster
         // feedback. `6` is the minimum number of characters required.
+        // Guard against a double-tap firing two concurrent update
+        // requests while the first one is still in flight (the Button
+        // component this screen uses has no built-in disabled state).
+        if (loading) {
+            return;
+        }
+
         if (newPassword.length < 6) {
-            // Shows a native alert popup with an "Error" title and this
-            // message. Since no buttons are specified, it defaults to a
-            // single "OK" button.
-            Alert.alert("Error", "Password must be at least 6 characters.");
+            setFormError("Password must be at least 6 characters.");
             // Stop here — don't proceed to actually calling Supabase.
             return;
         }
 
         if (newPassword !== confirmPassword) {
-            Alert.alert("Error", "Passwords don't match. Please re-type them to confirm.");
+            setFormError("Passwords don't match. Re-type them to confirm.");
             return;
         }
 
         // Flip loading on so the UI can show a "working" state.
+        setFormError(null);
         setLoading(true);
 
         // Ask Supabase to update the currently logged-in user's password.
@@ -84,11 +113,20 @@ export default function ResetPassword() {
         });
 
         if (error) {
-            // Show whatever error message Supabase returned (e.g. "Password
-            // should be at least 6 characters" or a network issue).
-            Alert.alert("Error", error.message);
+            // Supabase returns a literal "Auth session missing!" when this
+            // screen is reached without a valid recovery session (e.g. an
+            // expired or already-used reset link, or navigating here
+            // directly) -- translate that specific case into something a
+            // student or parent can actually act on, and pass anything
+            // else (e.g. "Password should be at least 6 characters")
+            // through as-is.
+            setFormError(
+                error.message.toLowerCase().includes('session')
+                    ? "This reset link has expired or was already used. Request a new one from the login screen."
+                    : error.message
+            );
         } else {
-            Alert.alert("Success", "Password updated! Logging you in...");
+            showAlert("Success", "Password updated! Logging you in...");
             // Send the user to the root route. Since they now have a valid
             // session, app/_layout.tsx's auth listener will pick that up
             // and redirect them further to the correct role-based screen.
@@ -104,11 +142,12 @@ export default function ResetPassword() {
         <View style={styles.container}>
             <WebContainer maxWidth={420} style={{ width: '100%' }}>
                 <Text style={styles.title}>Create New Password</Text>
-                <Text style={styles.fieldLabel}>NEW PASSWORD</Text>
+                <Text style={styles.fieldLabel}>New password</Text>
                 <TextInput
                     style={styles.input}
                     // Grey placeholder text shown when the field is empty.
                     placeholder="New Password"
+                    placeholderTextColor={theme.subtext}
                     // Masks the typed characters with dots, like a normal
                     // password field, so the new password isn't shown in
                     // plain text on screen.
@@ -121,16 +160,24 @@ export default function ResetPassword() {
                     // Every keystroke calls setNewPassword with the entire
                     // updated string, updating state (and thus re-rendering
                     // this component with the latest value).
-                    onChangeText={setNewPassword}
+                    onChangeText={(t) => { setNewPassword(t); setFormError(null); }}
+                    textContentType="newPassword"
+                    autoComplete="new-password"
                 />
-                <Text style={styles.fieldLabel}>CONFIRM PASSWORD</Text>
+                <Text style={styles.fieldLabel}>Confirm password</Text>
                 <TextInput
                     style={styles.input}
                     placeholder="Re-enter New Password"
+                    placeholderTextColor={theme.subtext}
                     secureTextEntry
                     value={confirmPassword}
-                    onChangeText={setConfirmPassword}
+                    onChangeText={(t) => { setConfirmPassword(t); setFormError(null); }}
+                    textContentType="newPassword"
+                    autoComplete="new-password"
                 />
+
+                {formError && <Text style={styles.formError}>{formError}</Text>}
+
                 <Button
                     // The label text swaps to "Updating..." while the request
                     // is in flight, giving the user visual feedback that
@@ -138,12 +185,32 @@ export default function ResetPassword() {
                     label={loading ? "Updating..." : "Update Password"}
                     onPress={updatePassword}
                 />
+
+                {/* Escape hatch: this screen previously had no way out at
+                    all for someone who arrived via an old/expired link or
+                    changed their mind. */}
+                <Link href="/login" asChild>
+                    <Pressable style={{ marginTop: 20 }}>
+                        <Text style={styles.linkText}>Cancel and back to Log In</Text>
+                    </Pressable>
+                </Link>
+
+                {/* Same partnership acknowledgement shown on login.tsx and
+                    the student/teacher account screens -- see login.tsx
+                    for why this belongs on every auth screen, not just
+                    signup. */}
+                <Text style={styles.acknowledgementText}>
+                    The GeoQuestOK app is a partnership between the Oklahoma State Department of Education’s
+                    Health & Physical Education Department and the Oklahoma Alliance for Geographic Education.
+                    This program works to fulfill the “Walk Across Oklahoma” foundation created by Oklahoma House
+                    Bill 1647.
+                </Text>
             </WebContainer>
         </View>
     );
 }
 
-const styles = StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
     // Inline object (not broken across multiple lines) — functionally
     // identical to the multi-line style objects seen in other files, just
     // more compact.
@@ -151,26 +218,60 @@ const styles = StyleSheet.create({
         flex: 1,               // fill the whole screen
         justifyContent: 'center', // vertically center the form
         padding: 20,            // 20px breathing room around the edges
-        backgroundColor: '#fff' // plain white background
+        backgroundColor: theme.background
     },
     title: {
+        fontFamily: 'Georgia',
         fontSize: 24,       // large heading text
         fontWeight: 'bold', // bold weight (equivalent to '700')
-        marginBottom: 20    // 20px of space below the title, before the input
+        color: theme.text,
+        marginBottom: 20,    // 20px of space below the title, before the input
+        textAlign: 'center'  // matches login.tsx and signup.tsx's centered titles
     },
+    // Matches login.tsx's fieldLabel (see there for why this replaced the
+    // old bold-uppercase micro-label style, and why it's upright rather
+    // than italic at this size).
     fieldLabel: {
-        fontSize: 11,
-        fontWeight: '800',
-        letterSpacing: 0.8,
-        color: '#8E8E93',
+        fontFamily: 'Georgia',
+        fontSize: 13,
+        fontWeight: '600',
+        letterSpacing: 0.2,
+        color: theme.subtext,
         marginBottom: 4
     },
     input: {
-        borderWidth: 1,      // thin 1px border around the text box
-        borderColor: '#ccc', // light gray border color
-        padding: 15,         // 15px of internal padding so text isn't
-                              // jammed against the border
-        borderRadius: 8,     // slightly rounded corners
+        backgroundColor: theme.surface,
+        borderWidth: 1,
+        borderColor: theme.border,
+        borderRadius: 12,
+        paddingHorizontal: 16,
+        paddingVertical: 13,
+        fontSize: 16,
+        color: theme.text,
+        fontFamily: 'Georgia',
         marginBottom: 15     // 15px of space below the input, before the button
+    },
+    linkText: {
+        color: theme.accent,
+        textAlign: 'center',
+        fontWeight: '600'
+    },
+    formError: {
+        // Matches signup.tsx's searchErrorText / login.tsx's formError red.
+        color: theme.error,
+        fontSize: 13,
+        lineHeight: 18,
+        textAlign: 'center',
+        marginBottom: 14,
+    },
+    // Matches login.tsx's acknowledgementText (see there for why).
+    acknowledgementText: {
+        fontSize: 11,
+        lineHeight: 16,
+        color: theme.subtext,
+        textAlign: 'center',
+        paddingHorizontal: 32,
+        paddingTop: 24,
+        paddingBottom: 16,
     }
 });

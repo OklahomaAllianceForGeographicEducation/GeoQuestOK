@@ -7,7 +7,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Modal, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
 // Deliberately importing ScrollView from react-native-gesture-handler
 // rather than plain react-native: this modal also has active Gesture.Pan
 // handlers (the header drag-to-dismiss below, plus EdgeSwipeBack) inside
@@ -72,7 +72,8 @@ export default function FullLessonPlanModal({
     trailName: string;
     onClose: () => void;
 }) {
-    const theme = colors.light;
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
 
     // Vertical drag offset for the swipe-to-dismiss gesture, applied to the
     // sheet's translateY. Reset to 0 every time the modal opens so a
@@ -254,7 +255,19 @@ export default function FullLessonPlanModal({
 
 const styles = StyleSheet.create({
     overlay: { justifyContent: 'flex-end' },
-    sheetPressable: { width: '100%', alignItems: 'center' },
+    // height: '100%' (not just width) matters here on web specifically:
+    // `sheet` below clamps itself with `maxHeight: '92%'`, and a
+    // percentage height only resolves against a parent with an actual
+    // computed height -- native's Modal host already provides that
+    // implicitly, but react-native-web renders this as real CSS, where an
+    // auto-height parent makes `maxHeight: '92%'` on the child a no-op.
+    // Without this, the sheet grew to its full content height and
+    // overflowed past the bottom of the viewport on long lesson plans.
+    // justifyContent: 'flex-end' here (in addition to the parent
+    // overlay's own flex-end) keeps the sheet bottom-anchored now that
+    // this wrapper itself fills the full height rather than shrinking to
+    // its content.
+    sheetPressable: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'flex-end' },
     sheet: { width: '100%', maxWidth: 980, alignSelf: 'center', maxHeight: '92%', borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1 },
     dragHandle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: 'rgba(120,120,120,0.35)', marginTop: 8 },
     headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1 },

@@ -12,7 +12,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
     ActivityIndicator,
-    Alert,
     // AppState/AppStateStatus let the app detect when it moves between
     // foreground ("active"), background, and inactive states — e.g.
     // switching away to another app and back. Used here to refresh data
@@ -28,6 +27,7 @@ import {
     View
 } from 'react-native';
 import { DIFFICULTY_COLORS, colors, getTrailStyles } from '../../commonStyles';
+import { showAlert } from '../../lib/confirmAlert';
 import ModalBackdrop from '../../components/ModalBackdrop';
 import PresidentFactsModal from '../../components/PresidentFactsModal';
 import RoutePreviewMap from '../../components/RoutePreviewMap';
@@ -398,7 +398,7 @@ export default function WornLeatherFieldJournal() {
         if (presidentsUnlocked) {
             setPresidentFactsModalOpen(true);
         } else {
-            Alert.alert(
+            showAlert(
                 'Still Locked',
                 'Finish the Presidential Fitness Challenge — beat the target in all 6 events — to unlock fun facts about presidents who visited Oklahoma.'
             );
@@ -426,7 +426,7 @@ export default function WornLeatherFieldJournal() {
                         <View style={styles.spineStitchLine} />
                         <View style={styles.coverMainContent}>
                             <Ionicons name="compass-outline" size={48} color="#C5A059" style={styles.coverIcon} />
-                            <Text style={styles.coverOwnerName}>{studentUsername.toUpperCase()}'S</Text>
+                            <Text style={styles.coverOwnerName}>{studentUsername.toUpperCase()}&apos;S</Text>
                             <Text style={styles.coverMainTitle}>FIELD JOURNAL</Text>
                             <View style={styles.vintageSeparatorLine} />
                             <Text style={styles.coverFootnote}>OKLAHOMA STATE PARKS GEOPORTFOLIO</Text>
@@ -471,7 +471,7 @@ export default function WornLeatherFieldJournal() {
                                 <View style={styles.inkUnderlineDivider} />
                                 <View style={styles.stampMatrixGrid}>
                                     {badges.map((badge) => {
-                                        const imageUrl = `${SUPABASE_STORAGE_BASE_URL}/${badge.image_filename}`;
+                                        const imageUrl = `${SUPABASE_STORAGE_BASE_URL}${badge.image_filename}`;
                                         return (
                                         <Pressable
                                                 key={badge.id}
@@ -564,7 +564,7 @@ export default function WornLeatherFieldJournal() {
                                                 <Text style={styles.handwrittenMetricLine}>Fitness Assessment: Logged {entry.exercise_score} score units inside {entry.exercise_logged.replace('_', ' ')} index parameters.</Text>
                                             )}
                                             {entry.journal_reflection && (
-                                                <Text style={styles.handwrittenParagraphText}>"{entry.journal_reflection}"</Text>
+                                                <Text style={styles.handwrittenParagraphText}>&quot;{entry.journal_reflection}&quot;</Text>
                                             )}
                                             <View style={styles.journalRowSeparatorOrnament} />
                                         </View>
@@ -675,7 +675,7 @@ export default function WornLeatherFieldJournal() {
                                     !selectedBadge.unlocked && styles.badgeImageWrapperLocked
                                 ]}>
                                     <Image
-                                        source={{ uri: `${SUPABASE_STORAGE_BASE_URL}/${selectedBadge.image_filename}` }}
+                                        source={{ uri: `${SUPABASE_STORAGE_BASE_URL}${selectedBadge.image_filename}` }}
                                         style={styles.largeStampPNGSticker}
                                         contentFit="contain"
                                     />
@@ -766,6 +766,7 @@ export default function WornLeatherFieldJournal() {
                                             accentColor={colors[scheme].secondary}
                                             subtextColor={colors[scheme].subtext}
                                             borderColor={colors[scheme].border}
+                                            theme={theme}
                                         />
                                     )}
                                 </View>
@@ -907,9 +908,6 @@ const styles = StyleSheet.create({
     // giving the "earned" notice a positive, celebratory feel — distinct
     // from the neutral parchment colors used elsewhere on this card.
     parchmentEarnedNotice: { color: '#2D4A22', fontSize: 11, fontWeight: '700', backgroundColor: '#E2ECD8', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, textAlign: 'center', overflow: 'hidden', width: '100%' },
-    // NOTE: howEarnedDetailSubtext is defined here but never referenced
-    // anywhere in the component above — dead/unused style.
-    howEarnedDetailSubtext: { fontSize: 11, color: '#5C5446', fontFamily: 'Georgia', marginTop: 4, fontStyle: 'italic' },
     parchmentLockedHint: { fontSize: 12, color: '#756D5E', fontStyle: 'italic', fontFamily: 'Georgia', textAlign: 'center', lineHeight: 17, marginTop: 4 },
     closeParchmentBtn: { marginTop: 18, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#DDD9D0', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 20 },
     closeParchmentBtnText: { color: '#4E3629', fontWeight: '700', fontSize: 13 }

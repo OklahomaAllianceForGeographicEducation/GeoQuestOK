@@ -5,7 +5,7 @@
 // plain text box, a dropdown-style picker, or a one-per-line textarea —
 // nothing that looks like code or a database table.
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type SetStateAction } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -186,6 +186,46 @@ export default function OkageContentScreen() {
     const [previewLesson, setPreviewLesson] = useState<FullLessonPlan | null>(null);
     const [previewModalOpen, setPreviewModalOpen] = useState(false);
 
+    // Tracks whether the currently-open trail has ANY in-progress edit
+    // (trail info fields, a lesson-guide draft, or a full-lesson-plan
+    // draft) that hasn't been saved yet. Set to true by every user edit
+    // below (via the `...Dirty` draft setters and the trail-info field
+    // handlers), and reset to false whenever a fresh trail is opened/left
+    // or a save completes — used to guard the "switch trails" and "Back to
+    // Trail List" flows from silently discarding unsaved work.
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+    // Thin wrappers around setLessonDrafts/setFullLessonDrafts that also
+    // flag the draft as dirty — used ONLY at genuine user-edit call sites
+    // (typing into a field, adding/removing a standard). The initial-load
+    // and trail-switch resets below call the raw setters directly so
+    // loading a trail's saved content doesn't itself count as an edit.
+    function setLessonDraftsDirty(updater: SetStateAction<Record<string, { content: string; standardCode: string }>>) {
+        setHasUnsavedChanges(true);
+        setLessonDrafts(updater);
+    }
+    function setFullLessonDraftsDirty(updater: SetStateAction<Record<string, FullLessonDraft>>) {
+        setHasUnsavedChanges(true);
+        setFullLessonDrafts(updater);
+    }
+    // Same idea for the four plain Trail Description fields.
+    function setRouteDirty(text: string) {
+        setHasUnsavedChanges(true);
+        setRoute(text);
+    }
+    function setHighlightsTextDirty(text: string) {
+        setHasUnsavedChanges(true);
+        setHighlightsText(text);
+    }
+    function setHistoricalFocusDirty(text: string) {
+        setHasUnsavedChanges(true);
+        setHistoricalFocus(text);
+    }
+    function setImageUrlDirty(text: string) {
+        setHasUnsavedChanges(true);
+        setImageUrl(text);
+    }
+
     useEffect(() => {
         async function bootstrap() {
             try {
@@ -205,7 +245,10 @@ export default function OkageContentScreen() {
     // Switches from the trail-list view into the editing view for a
     // specific trail, pre-filling every form field with that trail's
     // current saved values.
-    function openTrail(trail: TrailSummary) {
+    function doOpenTrail(trail: TrailSummary) {
+        // Fresh baseline for the trail we're about to load — nothing
+        // edited yet.
+        setHasUnsavedChanges(false);
         setSelectedTrail(trail);
         setRoute(trail.route);
         // Highlights are stored as an array in the database but edited as
@@ -223,6 +266,23 @@ export default function OkageContentScreen() {
         setExpandedFullLessonKey(null);
     }
 
+    // Public entry point for opening a trail from the picker list. If
+    // another trail is already open with in-progress, unsaved edits,
+    // switching straight to a different one would silently blow away that
+    // work (these are long multi-field forms with several independent
+    // per-subject Save buttons, so it's easy to lose real work) — confirm
+    // first.
+    function openTrail(trail: TrailSummary) {
+        if (selectedTrail && selectedTrail.id !== trail.id && hasUnsavedChanges) {
+            confirmAlert('Unsaved Changes', 'You have unsaved changes. Discard them?', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Discard', style: 'destructive', onPress: () => doOpenTrail(trail) },
+            ]);
+            return;
+        }
+        doOpenTrail(trail);
+    }
+
     // Loads the lesson plans (both the short blurb and the full lesson
     // plans) for whichever trail is currently selected. Re-runs whenever
     // `selectedTrail` changes (a new trail opened, or the user goes back to
@@ -232,6 +292,7 @@ export default function OkageContentScreen() {
             setLessonDrafts({});
             setFullLessons(new Map());
             setFullLessonDrafts({});
+            setHasUnsavedChanges(false);
             return;
         }
         async function loadLessonPlans() {
@@ -323,6 +384,7 @@ export default function OkageContentScreen() {
             setTrails((prev) =>
                 prev.map((t) => (t.id === selectedTrail.id ? { ...t, route, highlights, historicalFocus, image_url: imageUrl } : t))
             );
+            setHasUnsavedChanges(false);
             showAlert('Saved', 'Trail description updated.');
         } catch (err: any) {
             showAlert('Save Failed', err.message || 'Could not save trail info.');
@@ -353,6 +415,7 @@ export default function OkageContentScreen() {
                 standardCode: draft.standardCode.trim() || null,
                 updatedBy: staffId,
             });
+            setHasUnsavedChanges(false);
             showAlert('Saved', 'Lesson guide updated.');
         } catch (err: any) {
             showAlert('Save Failed', err.message || 'Could not save this lesson guide.');
@@ -403,6 +466,7 @@ export default function OkageContentScreen() {
             });
             const refreshed = await fetchFullLessonsForTrail(selectedTrail.id);
             setFullLessons(refreshed);
+            setHasUnsavedChanges(false);
             showAlert('Saved', 'Full lesson plan saved.');
         } catch (err: any) {
             showAlert('Save Failed', err.message || 'Could not save this full lesson plan.');
@@ -476,7 +540,7 @@ export default function OkageContentScreen() {
     // standards array, skipping it if that exact code is already listed.
     function handleAddStandardToFullLesson(subject: LessonSubject, standard: StandardRow) {
         const key = `${gradeTier}:${subject}`;
-        setFullLessonDrafts((prev) => {
+        setFullLessonDraftsDirty((prev) => {
             const draft = prev[key] ?? { ...EMPTY_FULL_LESSON_DRAFT };
             if (draft.standards.some((s) => s.code === standard.code)) return prev;
             const entry: LessonStandard = {
@@ -491,11 +555,25 @@ export default function OkageContentScreen() {
 
     function handleRemoveStandardFromFullLesson(subject: LessonSubject, code: string) {
         const key = `${gradeTier}:${subject}`;
-        setFullLessonDrafts((prev) => {
+        setFullLessonDraftsDirty((prev) => {
             const draft = prev[key];
             if (!draft) return prev;
             return { ...prev, [key]: { ...draft, standards: draft.standards.filter((s) => s.code !== code) } };
         });
+    }
+
+    // Leaves the trail editor and returns to the trail-picker list —
+    // guarded the same way as switching trails above, since this discards
+    // any in-progress edit just as silently otherwise.
+    function handleBackToTrailList() {
+        if (hasUnsavedChanges) {
+            confirmAlert('Unsaved Changes', 'You have unsaved changes. Discard them?', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Discard', style: 'destructive', onPress: () => setSelectedTrail(null) },
+            ]);
+            return;
+        }
+        setSelectedTrail(null);
     }
 
     if (loading) {
@@ -513,9 +591,14 @@ export default function OkageContentScreen() {
     if (selectedTrail) {
         return (
             <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: theme.background }}>
-                <EdgeSwipeBack onSwipeBack={() => setSelectedTrail(null)} />
+                {/* Routed through the same unsaved-changes guard as the
+                    "Back to Trail List" button below -- this used to call
+                    setSelectedTrail(null) directly, discarding an
+                    in-progress edit just as silently as the button did
+                    before it was guarded. Found by an /impeccable audit. */}
+                <EdgeSwipeBack onSwipeBack={handleBackToTrailList} />
                 <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
-                    <Pressable style={styles.backLink} onPress={() => setSelectedTrail(null)} accessibilityRole="button">
+                    <Pressable style={styles.backLink} onPress={handleBackToTrailList} accessibilityRole="button">
                         <Ionicons name="arrow-back" size={16} color={theme.accent} />
                         <Text style={[styles.backLinkText, { color: theme.accent }]}>Back to Trail List</Text>
                     </Pressable>
@@ -533,7 +616,7 @@ export default function OkageContentScreen() {
                         <TextInput
                             style={[styles.textInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
                             value={route}
-                            onChangeText={setRoute}
+                            onChangeText={setRouteDirty}
                             placeholder="Start → Stop → End"
                             placeholderTextColor={theme.subtext}
                         />
@@ -542,7 +625,7 @@ export default function OkageContentScreen() {
                         <TextInput
                             style={[styles.textArea, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
                             value={highlightsText}
-                            onChangeText={setHighlightsText}
+                            onChangeText={setHighlightsTextDirty}
                             // The placeholder itself demonstrates the
                             // expected multi-line format using an actual
                             // '\n' newline character inside the string.
@@ -556,7 +639,7 @@ export default function OkageContentScreen() {
                         <TextInput
                             style={[styles.textArea, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
                             value={historicalFocus}
-                            onChangeText={setHistoricalFocus}
+                            onChangeText={setHistoricalFocusDirty}
                             placeholder="What historical era or theme does this trail cover?"
                             placeholderTextColor={theme.subtext}
                             multiline
@@ -567,7 +650,7 @@ export default function OkageContentScreen() {
                         <TextInput
                             style={[styles.textInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
                             value={imageUrl}
-                            onChangeText={setImageUrl}
+                            onChangeText={setImageUrlDirty}
                             placeholder="https://..."
                             placeholderTextColor={theme.subtext}
                             autoCapitalize="none"
@@ -646,7 +729,7 @@ export default function OkageContentScreen() {
                                             // overwriting the one key that
                                             // changed.
                                             onChangeText={(text) =>
-                                                setLessonDrafts((prev) => ({ ...prev, [key]: { ...draft, content: text } }))
+                                                setLessonDraftsDirty((prev) => ({ ...prev, [key]: { ...draft, content: text } }))
                                             }
                                             placeholder="What should students do for this subject on this trail?"
                                             placeholderTextColor={theme.subtext}
@@ -660,7 +743,7 @@ export default function OkageContentScreen() {
                                                 style={[styles.textInput, { flex: 1, backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
                                                 value={draft.standardCode}
                                                 onChangeText={(text) =>
-                                                    setLessonDrafts((prev) => ({ ...prev, [key]: { ...draft, standardCode: text } }))
+                                                    setLessonDraftsDirty((prev) => ({ ...prev, [key]: { ...draft, standardCode: text } }))
                                                 }
                                                 placeholder="e.g. 3.RL.2"
                                                 placeholderTextColor={theme.subtext}
@@ -735,7 +818,7 @@ export default function OkageContentScreen() {
                                                 <TextInput
                                                     style={[styles.textInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
                                                     value={fullDraft.title}
-                                                    onChangeText={(text) => setFullLessonDrafts((prev) => ({ ...prev, [key]: { ...fullDraft, title: text } }))}
+                                                    onChangeText={(text) => setFullLessonDraftsDirty((prev) => ({ ...prev, [key]: { ...fullDraft, title: text } }))}
                                                     placeholder="Lesson plan title"
                                                     placeholderTextColor={theme.subtext}
                                                 />
@@ -744,7 +827,7 @@ export default function OkageContentScreen() {
                                                 <TextInput
                                                     style={[styles.textInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
                                                     value={fullDraft.subtitle}
-                                                    onChangeText={(text) => setFullLessonDrafts((prev) => ({ ...prev, [key]: { ...fullDraft, subtitle: text } }))}
+                                                    onChangeText={(text) => setFullLessonDraftsDirty((prev) => ({ ...prev, [key]: { ...fullDraft, subtitle: text } }))}
                                                     placeholder="A short supporting line under the title"
                                                     placeholderTextColor={theme.subtext}
                                                 />
@@ -753,7 +836,7 @@ export default function OkageContentScreen() {
                                                 <TextInput
                                                     style={[styles.textInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
                                                     value={fullDraft.timeFrame}
-                                                    onChangeText={(text) => setFullLessonDrafts((prev) => ({ ...prev, [key]: { ...fullDraft, timeFrame: text } }))}
+                                                    onChangeText={(text) => setFullLessonDraftsDirty((prev) => ({ ...prev, [key]: { ...fullDraft, timeFrame: text } }))}
                                                     placeholder="e.g. 45 minutes"
                                                     placeholderTextColor={theme.subtext}
                                                 />
@@ -762,7 +845,7 @@ export default function OkageContentScreen() {
                                                 <TextInput
                                                     style={[styles.textArea, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
                                                     value={fullDraft.appConnection}
-                                                    onChangeText={(text) => setFullLessonDrafts((prev) => ({ ...prev, [key]: { ...fullDraft, appConnection: text } }))}
+                                                    onChangeText={(text) => setFullLessonDraftsDirty((prev) => ({ ...prev, [key]: { ...fullDraft, appConnection: text } }))}
                                                     placeholder="How does this lesson tie back to what students do in the app?"
                                                     placeholderTextColor={theme.subtext}
                                                     multiline
@@ -773,7 +856,7 @@ export default function OkageContentScreen() {
                                                 <TextInput
                                                     style={[styles.textArea, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
                                                     value={fullDraft.purpose}
-                                                    onChangeText={(text) => setFullLessonDrafts((prev) => ({ ...prev, [key]: { ...fullDraft, purpose: text } }))}
+                                                    onChangeText={(text) => setFullLessonDraftsDirty((prev) => ({ ...prev, [key]: { ...fullDraft, purpose: text } }))}
                                                     placeholder="What is this lesson meant to accomplish?"
                                                     placeholderTextColor={theme.subtext}
                                                     multiline
@@ -811,7 +894,7 @@ export default function OkageContentScreen() {
                                                 <TextInput
                                                     style={[styles.textInput, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
                                                     value={fullDraft.standardsNote}
-                                                    onChangeText={(text) => setFullLessonDrafts((prev) => ({ ...prev, [key]: { ...fullDraft, standardsNote: text } }))}
+                                                    onChangeText={(text) => setFullLessonDraftsDirty((prev) => ({ ...prev, [key]: { ...fullDraft, standardsNote: text } }))}
                                                     placeholder="A short note shown under the standards list"
                                                     placeholderTextColor={theme.subtext}
                                                 />
@@ -820,7 +903,7 @@ export default function OkageContentScreen() {
                                                 <TextInput
                                                     style={[styles.textArea, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
                                                     value={fullDraft.objectivesText}
-                                                    onChangeText={(text) => setFullLessonDrafts((prev) => ({ ...prev, [key]: { ...fullDraft, objectivesText: text } }))}
+                                                    onChangeText={(text) => setFullLessonDraftsDirty((prev) => ({ ...prev, [key]: { ...fullDraft, objectivesText: text } }))}
                                                     placeholder={'Students will be able to...\n...'}
                                                     placeholderTextColor={theme.subtext}
                                                     multiline
@@ -831,7 +914,7 @@ export default function OkageContentScreen() {
                                                 <TextInput
                                                     style={[styles.textArea, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
                                                     value={fullDraft.materialsText}
-                                                    onChangeText={(text) => setFullLessonDrafts((prev) => ({ ...prev, [key]: { ...fullDraft, materialsText: text } }))}
+                                                    onChangeText={(text) => setFullLessonDraftsDirty((prev) => ({ ...prev, [key]: { ...fullDraft, materialsText: text } }))}
                                                     placeholder={'Printed map handout\n...'}
                                                     placeholderTextColor={theme.subtext}
                                                     multiline
@@ -842,7 +925,7 @@ export default function OkageContentScreen() {
                                                 <TextInput
                                                     style={[styles.textArea, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
                                                     value={fullDraft.proceduresText}
-                                                    onChangeText={(text) => setFullLessonDrafts((prev) => ({ ...prev, [key]: { ...fullDraft, proceduresText: text } }))}
+                                                    onChangeText={(text) => setFullLessonDraftsDirty((prev) => ({ ...prev, [key]: { ...fullDraft, proceduresText: text } }))}
                                                     placeholder={'Introduce the landmark...\nHave students...'}
                                                     placeholderTextColor={theme.subtext}
                                                     multiline
@@ -853,7 +936,7 @@ export default function OkageContentScreen() {
                                                 <TextInput
                                                     style={[styles.textArea, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
                                                     value={fullDraft.extensionText}
-                                                    onChangeText={(text) => setFullLessonDrafts((prev) => ({ ...prev, [key]: { ...fullDraft, extensionText: text } }))}
+                                                    onChangeText={(text) => setFullLessonDraftsDirty((prev) => ({ ...prev, [key]: { ...fullDraft, extensionText: text } }))}
                                                     placeholder="Optional enrichment activities for early finishers"
                                                     placeholderTextColor={theme.subtext}
                                                     multiline
@@ -864,7 +947,7 @@ export default function OkageContentScreen() {
                                                 <TextInput
                                                     style={[styles.textArea, { backgroundColor: theme.surface, borderColor: theme.border, color: theme.text }]}
                                                     value={fullDraft.assessment}
-                                                    onChangeText={(text) => setFullLessonDrafts((prev) => ({ ...prev, [key]: { ...fullDraft, assessment: text } }))}
+                                                    onChangeText={(text) => setFullLessonDraftsDirty((prev) => ({ ...prev, [key]: { ...fullDraft, assessment: text } }))}
                                                     placeholder="How is student understanding checked?"
                                                     placeholderTextColor={theme.subtext}
                                                     multiline
@@ -916,6 +999,7 @@ export default function OkageContentScreen() {
                 <StandardPickerModal
                     visible={pickerOpenFor !== null}
                     onClose={() => setPickerOpenFor(null)}
+                    theme={theme}
                     accentColor={theme.accent}
                     // Pre-filter the picker to the standards subject that
                     // corresponds to whichever lesson subject's "browse"
@@ -932,12 +1016,13 @@ export default function OkageContentScreen() {
                         // standardCode field. `prev[key] ?? { content: '' }`
                         // guards against that draft entry not existing yet
                         // for some reason.
-                        setLessonDrafts((prev) => ({ ...prev, [key]: { ...(prev[key] ?? { content: '' }), standardCode: standard.code } }));
+                        setLessonDraftsDirty((prev) => ({ ...prev, [key]: { ...(prev[key] ?? { content: '' }), standardCode: standard.code } }));
                     }}
                 />
                 <StandardPickerModal
                     visible={fullLessonPickerOpenFor !== null}
                     onClose={() => setFullLessonPickerOpenFor(null)}
+                    theme={theme}
                     accentColor={theme.accent}
                     initialSubject={fullLessonPickerOpenFor ? LESSON_SUBJECT_TO_STANDARDS_SUBJECT[fullLessonPickerOpenFor] : undefined}
                     onSelect={(standard) => {
@@ -1042,7 +1127,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     fieldLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6, marginBottom: 6, marginTop: 10 },
     textInput: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
     standardRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    browseButton: { borderWidth: 1.5, borderRadius: 10, padding: 10 },
+    browseButton: { borderWidth: 1.5, borderRadius: 10, padding: 14 },
     textArea: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, minHeight: 70, textAlignVertical: 'top' },
 
     saveButton: { marginTop: 16, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
@@ -1061,7 +1146,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     subjectHeader: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 },
     subjectTitle: { fontSize: 13, fontWeight: '700' },
 
-    saveButtonSmall: { marginTop: 10, borderWidth: 1.5, borderRadius: 10, paddingVertical: 9, alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 16 },
+    saveButtonSmall: { marginTop: 10, borderWidth: 1.5, borderRadius: 10, paddingVertical: 15, alignItems: 'center', alignSelf: 'flex-start', paddingHorizontal: 16 },
     saveButtonSmallText: { fontSize: 12, fontWeight: '700' },
 
     fullLessonDivider: { borderTopWidth: 1, marginTop: 16, borderStyle: 'dashed' },

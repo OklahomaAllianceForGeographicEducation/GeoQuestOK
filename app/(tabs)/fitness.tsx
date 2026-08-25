@@ -8,7 +8,6 @@ import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     KeyboardAvoidingView,
     Platform,
     Pressable,
@@ -36,7 +35,7 @@ import { useBadgeUnlocks } from '../../components/BadgeUnlockProvider';
 import NumericEntryModal from '../../components/NumericEntryModal';
 import { logMilesActivity } from '../../lib/activity';
 import { ActivityKey, formatActivitySummary, formatMilesShort, InputUnit } from '../../lib/activityTypes';
-import { confirmAlert } from '../../lib/confirmAlert';
+import { confirmAlert, showAlert } from '../../lib/confirmAlert';
 import { supabase } from '../../utils/supabase';
 
 // The 6 exercises this journal can track a score for.
@@ -276,26 +275,26 @@ export default function AdvancedStudentJournal() {
         // Validation: if the walking section is toggled on, an activity
         // MUST actually have been logged via the modal.
         if (enableWalking && !activityLog) {
-            Alert.alert("Activity Enabled", "Please log an activity or untoggle the activity field.");
+            showAlert("Activity Enabled", "Please log an activity or untoggle the activity field.");
             return;
         }
         // Similarly, if exercise tracking is on, a score must be entered.
         if (enableExercise && !inputScore) {
-            Alert.alert("Exercise Enabled", "Please enter your exercise results or untoggle the evaluation field.");
+            showAlert("Exercise Enabled", "Please enter your exercise results or untoggle the evaluation field.");
             return;
         }
         // If NEITHER section is enabled, there must at least be some
         // reflection text — otherwise there's nothing meaningful to save
         // at all.
         if (!enableWalking && !enableExercise && !reflection.trim()) {
-            Alert.alert("Empty Document", "Please select at least one item type or write a thought to save.");
+            showAlert("Empty Document", "Please select at least one item type or write a thought to save.");
             return;
         }
         // Logging actual miles requires an active trail to attribute
         // them to — without one, there's nowhere to apply the mileage
         // progress.
         if (enableWalking && miles > 0 && !activeTrailId) {
-            Alert.alert('No Active Trail', 'Pick a trail in the dashboard before logging miles here.');
+            showAlert('No Active Trail', 'Pick a trail in the dashboard before logging miles here.');
             return;
         }
 
@@ -407,7 +406,7 @@ export default function AdvancedStudentJournal() {
             // catches the common case, but this is a friendlier fallback
             // for anything that slips past it.
             const isOverflow = typeof err?.message === 'string' && /overflow|out of range/i.test(err.message);
-            Alert.alert(
+            showAlert(
                 "Log Failure",
                 isOverflow
                     ? "One of the numbers you entered is too large to save. Please double-check it and try again."
@@ -632,6 +631,19 @@ export default function AdvancedStudentJournal() {
                                             style={[styles.dropdownRow, selectedExercise === opt.key && { backgroundColor: theme.background }]}
                                             onPress={() => {
                                                 setSelectedExercise(opt.key);
+                                                // Clear any previously
+                                                // entered score -- without
+                                                // this, switching exercises
+                                                // (e.g. push-ups -> mile
+                                                // run) kept the old numeric
+                                                // value on screen, now
+                                                // mislabeled under the new
+                                                // exercise's units, and
+                                                // submitting it wrote that
+                                                // stale number against the
+                                                // wrong benchmark. Found by
+                                                // an /impeccable audit.
+                                                setInputScore('');
                                                 // Selecting an option
                                                 // immediately closes the
                                                 // dropdown, like a native

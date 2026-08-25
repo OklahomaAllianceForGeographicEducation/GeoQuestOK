@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 // ScrollView.
 import { ActivityIndicator, Alert, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { colors, Theme } from '../../commonStyles';
+import { escapeHtml } from '../../lib/htmlExport';
 import { formatMiles } from '../../lib/trails';
 
 // Data-fetching + data-shaping helpers, kept in lib/reports.ts so the
@@ -116,7 +117,15 @@ export default function OkageReportsScreen() {
     // `districts` list, so exporting after a search only exports what's
     // currently on screen (what-you-see-is-what-you-export).
     function csvField(value: string | number): string {
-        const str = String(value);
+        let str = String(value);
+        // CSV/spreadsheet formula-injection guard: a value that starts with
+        // =, +, -, or @ gets interpreted as a formula by Excel/Sheets when
+        // the exported file is opened. School/district names are teacher-
+        // entered text, so prefix a leading apostrophe -- the standard
+        // "treat as text" escape -- to neutralize that before it can run.
+        if (/^[=+\-@]/.test(str.trimStart())) {
+            str = `'${str}`;
+        }
         // RFC 4180 quoting: wrap in quotes (doubling any internal quotes)
         // whenever the value itself contains a comma, quote, or newline.
         return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
@@ -165,7 +174,7 @@ export default function OkageReportsScreen() {
                 .map(
                     (d) => `
                         <tr>
-                            <td style="padding: 8px; font-weight: bold;">${d.districtName}</td>
+                            <td style="padding: 8px; font-weight: bold;">${escapeHtml(d.districtName)}</td>
                             <td style="padding: 8px; text-align: center;">${d.schools.length}</td>
                             <td style="padding: 8px; text-align: center;">${d.studentCount}</td>
                             <td style="padding: 8px; text-align: right;">${formatMiles(d.totalMiles)} mi</td>
@@ -181,14 +190,14 @@ export default function OkageReportsScreen() {
                         .map(
                             (s) => `
                                 <tr>
-                                    <td style="padding: 6px 8px;">${s.schoolName}</td>
+                                    <td style="padding: 6px 8px;">${escapeHtml(s.schoolName)}</td>
                                     <td style="padding: 6px 8px; text-align: center;">${s.studentCount}</td>
                                     <td style="padding: 6px 8px; text-align: right;">${formatMiles(s.totalMiles)} mi</td>
                                 </tr>`
                         )
                         .join('');
                     return `
-                        <h3>${d.districtName}</h3>
+                        <h3>${escapeHtml(d.districtName)}</h3>
                         <table>
                             <thead><tr><th>School</th><th style="text-align:center;">Students</th><th style="text-align:right;">Miles</th></tr></thead>
                             <tbody>${schoolRowsHtml}</tbody>
@@ -210,7 +219,7 @@ export default function OkageReportsScreen() {
                     </head>
                     <body>
                         <h2>Statewide School Mileage Report</h2>
-                        <p><b>Generated:</b> ${new Date().toLocaleDateString()}${lowerSearch ? ` &middot; <b>Filtered by:</b> "${search.trim()}"` : ''}</p>
+                        <p><b>Generated:</b> ${new Date().toLocaleDateString()}${lowerSearch ? ` &middot; <b>Filtered by:</b> "${escapeHtml(search.trim())}"` : ''}</p>
                         <p style="font-size: 12px; color: #666;">Every figure below is a school or district aggregate -- no individual student names or ids are included.</p>
 
                         <h3 style="margin-top: 0;">Districts Overview</h3>
@@ -308,6 +317,7 @@ export default function OkageReportsScreen() {
                     <Pressable
                         onPress={handleExportCSV}
                         disabled={filteredDistricts.length === 0}
+                        accessibilityRole="button"
                         style={[
                             styles.exportButton,
                             { backgroundColor: theme.surface, borderColor: theme.border },
@@ -320,6 +330,7 @@ export default function OkageReportsScreen() {
                     <Pressable
                         onPress={handleExportPDF}
                         disabled={exporting || filteredDistricts.length === 0}
+                        accessibilityRole="button"
                         style={[
                             styles.exportButton,
                             { backgroundColor: theme.surface, borderColor: theme.border },

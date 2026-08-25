@@ -35,10 +35,12 @@ import {
 import { colors, getGlobalStyles, type Theme } from '../../commonStyles';
 import AdaptiveBlur from '../../components/AdaptiveBlur';
 import { signOutAndRedirect } from '../../lib/auth';
-import { confirmAlert } from '../../lib/confirmAlert';
+import { confirmAlert, showAlert } from '../../lib/confirmAlert';
+import { confirmDeleteAccount } from '../../lib/deleteAccount';
 import { requestTourReplay } from '../../lib/onboarding';
 import { ensureProfileRow } from '../../lib/profiles';
 import { supabase } from '../../utils/supabase';
+import { checkIsUsernameAppropriate } from '../../utils/profanity';
 
 // The subset of "profiles" table fields this screen reads/writes.
 type Profile = {
@@ -200,6 +202,7 @@ export default function TeacherAccountScreen() {
 
     // Profile Identity States
     const [profile, setProfile] = useState<Profile | null>(null);
+    const [deletingAccount, setDeletingAccount] = useState(false);
     // Whether the "Customize Profile & Avatar" bottom sheet is open.
     const [editOpen, setEditOpen] = useState(false);
 
@@ -349,7 +352,7 @@ export default function TeacherAccountScreen() {
                 }
             }
         } catch (err: any) {
-            Alert.alert('Error loading profile', err.message);
+            showAlert('Error loading profile', err.message);
         } finally {
             setLoading(false);
         }
@@ -480,7 +483,7 @@ export default function TeacherAccountScreen() {
     // meaningful/consistent avatar.
     function handleToggleMatchPublicHandle() {
         if (!usernameDraft.trim()) {
-            Alert.alert('Notice', 'Please enter a valid public handle first.');
+            showAlert('Notice', 'Please enter a valid public handle first.');
             return;
         }
         setIsUsingNicknameLook(true);
@@ -524,6 +527,19 @@ export default function TeacherAccountScreen() {
 
         if (!cleanUsername || !cleanDisplayName) {
             triggerAlert('Missing Fields', 'Username and Display Name cannot be blank.');
+            return;
+        }
+
+        // The same moderation filter used by signup.tsx/student-account.tsx
+        // was never wired up here, so a teacher could set a profane
+        // username/display name that then renders to students (rosters,
+        // leaderboards, reports). Runs the base built-in dictionary +
+        // character-allowlist layers; unlike signup/student-account this
+        // doesn't fetch the live Supabase-managed banned-words list, so it
+        // won't catch a school-specific term added there. Found by an
+        // /impeccable audit.
+        if (!checkIsUsernameAppropriate(cleanUsername, [], []) || !checkIsUsernameAppropriate(cleanDisplayName, [], [])) {
+            triggerAlert('Inappropriate Name', 'Please choose a school-appropriate username and display name.');
             return;
         }
 
@@ -616,7 +632,7 @@ export default function TeacherAccountScreen() {
             }
         } catch (err: any) {
             setProfile(prev => prev ? { ...prev, active_view: previousView || prev.active_view } : null);
-            Alert.alert('View Switch Failed', err.message || 'Could not update your workspace view.');
+            showAlert('View Switch Failed', err.message || 'Could not update your workspace view.');
         }
     };
 
@@ -699,6 +715,23 @@ export default function TeacherAccountScreen() {
                         accessibilityRole="button"
                     >
                         <Text style={{ color: theme.error, fontWeight: '600', fontSize: 14 }}>Sign Out</Text>
+                    </Pressable>
+
+                    {/* Deliberately understated relative to Sign Out --
+                        permanent and wipes everything, so it shouldn't be
+                        one careless tap away from anything else here. The
+                        confirmation dialog carries the actual warning. */}
+                    <Pressable
+                        onPress={() => confirmDeleteAccount(router, setDeletingAccount, 'Any classes you own will also be deleted, though your students keep their own accounts and data.')}
+                        disabled={deletingAccount}
+                        style={{ alignSelf: 'center', marginTop: 20, paddingVertical: 13, paddingHorizontal: 18 }}
+                        accessibilityRole="button"
+                    >
+                        {deletingAccount ? (
+                            <ActivityIndicator color={theme.subtext} size="small" />
+                        ) : (
+                            <Text style={{ color: theme.subtext, fontWeight: '600', fontSize: 13, textDecorationLine: 'underline' }}>Delete Account</Text>
+                        )}
                     </Pressable>
                 </View>
 

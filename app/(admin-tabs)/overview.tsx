@@ -1,4 +1,14 @@
 // app/(admin-tabs)/overview.tsx
+//
+// FILE-LEVEL OVERVIEW:
+// Lives inside the `(admin-tabs)` route group -- a parenthesized folder
+// name that Expo Router excludes from the actual URL, letting every screen
+// a District Admin can see live together while still resolving to clean
+// paths like `/overview`. That folder's `_layout.tsx` renders the bottom
+// tab bar and registers this file as the "Overview" tab (see
+// app/(admin-tabs)/_layout.tsx for the fuller explanation of route groups
+// and what a `_layout.tsx` file is).
+//
 // District Admin landing screen: district-wide KPI cards (schools, classes,
 // students, miles walked, Presidential Fitness Test participation/pass
 // rate) plus a "Top Schools" leaderboard, all aggregated server-side by
@@ -7,6 +17,9 @@
 // screen's "District Map" tab, one level up: a district admin sees every
 // school in their own district, a teacher only ever sees their own.
 
+// `useFocusEffect`: re-runs its callback every time this tab regains focus
+// (not just on first mount), so KPI numbers refresh whenever the admin
+// switches back to this tab.
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
@@ -28,12 +41,20 @@ import {
 import { formatMiles } from '../../lib/trails';
 import { supabase } from '../../utils/supabase';
 
+// Small formatting helper: turns a 0-1 fraction (e.g. 0.734) into a rounded
+// whole-number percentage string (e.g. "73%") for display.
 function pct(fraction: number): string {
     return `${Math.round(fraction * 100)}%`;
 }
 
 // A single KPI tile — the district-level equivalent of a stat card. Reused
 // 6 times below, so its own small component rather than repeated JSX.
+// Props: `label` (caption under the number), `value` (the already-
+// formatted display string, e.g. "42%" or "1,203"), `theme` (current color
+// palette, since this isn't rendered inside AdminOverview so it can't just
+// close over that component's `theme`), and optional `accentValue` (paints
+// the number in the accent color instead of the default text color, used to
+// draw attention to the headline stats). Returns a themed card View.
 function StatTile({ label, value, theme, accentValue }: { label: string; value: string; theme: Theme; accentValue?: boolean }) {
     const styles = getStyles(theme);
     return (
@@ -44,25 +65,54 @@ function StatTile({ label, value, theme, accentValue }: { label: string; value: 
     );
 }
 
+// The "Overview" tab's screen component: fetches and displays district-wide
+// aggregate stats for the signed-in District Admin. No props (rendered
+// directly by the tab navigator); renders either a loading spinner, an
+// empty state, or the full KPI dashboard depending on state below.
 export default function AdminOverview() {
     const scheme = useColorScheme() ?? 'light';
     const theme = colors[scheme];
     const styles = getStyles(theme);
 
+    // `loading`: true until the very first data load finishes -- shows a
+    // full-screen spinner instead of a dashboard with zeroed-out stats.
     const [loading, setLoading] = useState(true);
+    // `refreshing`: true only while a pull-to-refresh is in progress; drives
+    // the native RefreshControl spinner without hiding the whole screen the
+    // way `loading` does.
     const [refreshing, setRefreshing] = useState(false);
     const [districtName, setDistrictName] = useState('Your District');
     const [adminName, setAdminName] = useState('');
+    // `schoolGroups`: the per-school rollups (each school's classes, miles,
+    // fitness stats) computed from the raw report rows. Used both to render
+    // the "Top Schools" list and to compute `topSchools` below.
     const [schoolGroups, setSchoolGroups] = useState<SchoolReportGroup[]>([]);
+    // `totals`: district-wide totals (schools/classes/students/miles/
+    // fitness rates) derived from the same report rows. Initialized by
+    // calling `computeDistrictTotals([])` so the shape always matches what
+    // a real result looks like, just zeroed out, avoiding extra null checks
+    // in the JSX below.
     const [totals, setTotals] = useState(computeDistrictTotals([]));
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+    // Loads everything this screen needs: the admin's own profile (for
+    // their district id and display name) and then, if they have a
+    // district assigned, the full aggregated class report for that
+    // district. `useCallback` with an empty dependency array means this
+    // function reference never changes, which matters for the
+    // `useFocusEffect` below (its own inner `useCallback` depends on this).
     const loadOverview = useCallback(async () => {
         try {
             setErrorMessage(null);
+            // Who is signed in right now?
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
+            // Look up this admin's own profile row to find their district
+            // id and the human-readable district/display names to show in
+            // the header. `.maybeSingle()` tolerates zero rows (returns
+            // null) instead of throwing, in case the profile is somehow
+            // missing.
             const { data: profile, error: profileError } = await supabase
                 .from('profiles')
                 .select('display_name, username, district_id, school_district_name')
@@ -76,35 +126,62 @@ export default function AdminOverview() {
 
             const districtId = profile?.district_id || '';
             if (!districtId) {
+                // No district on file for this admin -- show the empty
+                // state rather than attempting a report fetch with a blank
+                // district id.
                 setSchoolGroups([]);
                 setTotals(computeDistrictTotals([]));
                 return;
             }
 
+            // `fetchDistrictAdminClassReport` (lib/districtAdmin.ts) calls a
+            // Supabase RPC/function that returns one row per class in the
+            // district, pre-aggregated server-side so this client never
+            // receives individual student rows. `groupBySchool` buckets
+            // those class rows by school, and `computeDistrictTotals` sums
+            // them into the district-wide KPI numbers shown in the stat
+            // tiles.
             const rows = await fetchDistrictAdminClassReport(districtId);
             setSchoolGroups(groupBySchool(rows));
             setTotals(computeDistrictTotals(rows));
         } catch (err: any) {
             setErrorMessage(err?.message || 'Could not load district data.');
         } finally {
+            // Clear both loading flags regardless of success/failure so
+            // neither the initial spinner nor a pull-to-refresh spinner
+            // gets stuck on screen.
             setLoading(false);
             setRefreshing(false);
         }
     }, []);
 
+    // Re-fetch every time this tab gains focus, e.g. switching from
+    // another tab back to Overview, so the numbers don't go stale while the
+    // admin is looking at other screens.
     useFocusEffect(
         useCallback(() => {
             void loadOverview();
         }, [loadOverview])
     );
 
+    // Event handler wired to the ScrollView's `RefreshControl` below: fired
+    // when the user pulls down on the scroll view. Flips on the refresh
+    // spinner, then re-runs the same load function used on focus.
     const onRefresh = () => {
         setRefreshing(true);
         void loadOverview();
     };
 
+    // Derived (not stored in state) list: take the school groups, sort a
+    // shallow copy by total miles walked descending, and keep only the top
+    // 5 for the "Top Schools" leaderboard. Recomputed on every render, which
+    // is fine since `schoolGroups` is usually small (one entry per school in
+    // a district).
     const topSchools = [...schoolGroups].sort((a, b) => b.totalMiles - a.totalMiles).slice(0, 5);
 
+    // Conditional render: only the very first load blocks the whole screen
+    // behind a spinner. Subsequent refreshes use `refreshing` +
+    // RefreshControl instead, so the dashboard stays visible while updating.
     if (loading) {
         return (
             <View style={[styles.centered, { backgroundColor: theme.background }]}>

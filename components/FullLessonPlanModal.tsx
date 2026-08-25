@@ -26,6 +26,19 @@ import type { FullLessonPlan } from '../lib/fullLessons';
 // dismiss" rather than snapping back open.
 const DISMISS_THRESHOLD = 120;
 
+// Section
+// Small internal presentational helper: renders an uppercase section
+// heading (e.g. "OBJECTIVES", "PROCEDURES") followed by whatever content is
+// passed as `children`. Used to give every part of the lesson plan a
+// consistent heading style without repeating the label + spacing markup
+// each time.
+// Props:
+// - label: the section heading text, shown in accent color.
+// - children: the section's body content (a paragraph, a BulletList, a
+//   NumberedList, etc).
+// - theme: the active light/dark theme colors, passed down from the parent
+//   modal rather than read again via useColorScheme() here.
+// Returns: a View containing the label and children, stacked vertically.
 function Section({ label, children, theme }: { label: string; children: React.ReactNode; theme: typeof colors.light }) {
     return (
         <View style={{ marginTop: 20 }}>
@@ -35,6 +48,15 @@ function Section({ label, children, theme }: { label: string; children: React.Re
     );
 }
 
+// BulletList
+// Small internal presentational helper: renders a list of plain bullet
+// points ("•" markers), used for unordered content like objectives,
+// materials, or extension activities where order doesn't matter.
+// Props:
+// - items: the list of strings to render, one per bullet row.
+// - theme: the active light/dark theme colors.
+// Returns: a View containing one row per item, each with a bullet dot and
+// the item's text.
 function BulletList({ items, theme }: { items: string[]; theme: typeof colors.light }) {
     return (
         <View style={{ gap: 6 }}>
@@ -48,6 +70,16 @@ function BulletList({ items, theme }: { items: string[]; theme: typeof colors.li
     );
 }
 
+// NumberedList
+// Small internal presentational helper: same idea as BulletList, but each
+// row gets a numbered circular badge (1, 2, 3, ...) instead of a bullet --
+// used for ordered content like step-by-step procedures, where the
+// sequence matters.
+// Props:
+// - items: the list of strings to render, one per numbered row.
+// - theme: the active light/dark theme colors.
+// Returns: a View containing one row per item, each with its 1-based index
+// badge and the item's text.
 function NumberedList({ items, theme }: { items: string[]; theme: typeof colors.light }) {
     return (
         <View style={{ gap: 8 }}>
@@ -61,6 +93,22 @@ function NumberedList({ items, theme }: { items: string[]; theme: typeof colors.
     );
 }
 
+// FullLessonPlanModal
+// The exported component itself. Renders the full lesson plan content
+// (objectives, materials, procedures, standards, etc, from the `lesson`
+// prop) as a bottom sheet, with both a close button and a swipe-to-dismiss
+// gesture on its header.
+// Props:
+// - visible: whether the Modal is shown. Controlled by the parent screen.
+// - lesson: the full lesson plan data to render, or null while it's still
+//   loading -- in that case a simple "Loading..." message is shown instead
+//   of the sheet's normal content (see the `!lesson` branch in the JSX).
+// - trailName: the name of the trail this lesson belongs to, shown as a
+//   small chip above the lesson title for context.
+// - onClose: called whenever the modal should be dismissed -- via the X
+//   button, the backdrop tap, or the header swipe-down gesture.
+// Returns: a React Native <Modal> containing a swipe-to-dismiss bottom
+// sheet with the lesson's full content in a scrollable body.
 export default function FullLessonPlanModal({
     visible,
     lesson,
@@ -116,6 +164,16 @@ export default function FullLessonPlanModal({
         });
 
     return (
+        // Modal is React Native's built-in component for rendering content
+        // above everything else in the view hierarchy (similar to a portal
+        // on web) -- it takes over the screen until dismissed.
+        // `animationType="slide"` slides the sheet up from the bottom;
+        // `transparent` lets the custom ModalBackdrop blur/dim layer below
+        // show through instead of an opaque native background;
+        // `onRequestClose` is required on Android (it's what the hardware
+        // back button triggers); `onShow` resets the drag offset back to 0
+        // once the OS has finished presenting the modal, as a second safety
+        // net alongside the `visible` effect above.
         <Modal
             visible={visible}
             animationType="slide"
@@ -123,6 +181,13 @@ export default function FullLessonPlanModal({
             onRequestClose={onClose}
             onShow={() => translateY.setValue(0)}
         >
+            {/* GestureHandlerRootView is required by
+                react-native-gesture-handler: any Gesture.* handlers (the
+                header's panGesture below, plus EdgeSwipeBack's internal
+                pan) must live inside one of these somewhere up their tree,
+                or gestures silently fail to recognize touches. Scoped
+                locally to this modal rather than relying on one at the app
+                root. */}
             <GestureHandlerRootView style={{ flex: 1 }}>
                 <ModalBackdrop style={styles.overlay} onPress={onClose}>
                     {/* Stops a tap inside the sheet from bubbling up to the
@@ -254,6 +319,7 @@ export default function FullLessonPlanModal({
 }
 
 const styles = StyleSheet.create({
+    // -- overlay/sheet container styles --
     overlay: { justifyContent: 'flex-end' },
     // height: '100%' (not just width) matters here on web specifically:
     // `sheet` below clamps itself with `maxHeight: '92%'`, and a
@@ -269,22 +335,27 @@ const styles = StyleSheet.create({
     // its content.
     sheetPressable: { width: '100%', height: '100%', alignItems: 'center', justifyContent: 'flex-end' },
     sheet: { width: '100%', maxWidth: 980, alignSelf: 'center', maxHeight: '92%', borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1 },
+    // -- drag handle / header bar styles --
     dragHandle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: 'rgba(120,120,120,0.35)', marginTop: 8 },
     headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1 },
     headerKicker: { fontSize: 11, fontWeight: '800', letterSpacing: 1.2 },
     centered: { padding: 40, alignItems: 'center' },
+    // -- lesson header text styles (trail chip, title, subtitle, meta pills) --
     trailChip: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6 },
     title: { fontSize: 22, fontWeight: '800', fontFamily: 'Georgia', marginBottom: 4 },
     subtitle: { fontSize: 14, fontStyle: 'italic', marginBottom: 4 },
     metaRow: { flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' },
     metaPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1 },
     metaPillText: { fontSize: 11, fontWeight: '700' },
+    // -- section heading / body text styles --
     sectionLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 },
     bodyText: { fontSize: 14, lineHeight: 20 },
+    // -- bullet/numbered list styles --
     bulletRow: { flexDirection: 'row', gap: 8, alignItems: 'flex-start' },
     bulletDot: { fontSize: 14, lineHeight: 20 },
     bulletText: { fontSize: 14, lineHeight: 20, flex: 1 },
     numberBadge: { fontSize: 12, fontWeight: '800', width: 20, height: 20, borderRadius: 10, borderWidth: 1, textAlign: 'center', lineHeight: 18 },
+    // -- Oklahoma academic standards card styles --
     standardCard: { borderWidth: 1, borderRadius: 12, padding: 12 },
     standardCode: { fontSize: 13, fontWeight: '800', marginBottom: 4 },
     standardMeta: { fontSize: 11, fontWeight: '600', fontStyle: 'italic' },

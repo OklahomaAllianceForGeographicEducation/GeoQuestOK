@@ -48,9 +48,14 @@ import { TourTargetsProvider } from '../lib/tourTargets';
 // object used to talk to the Supabase backend (auth, database, etc.).
 import { supabase } from '../utils/supabase';
 
+// Initializes Sentry as a side effect of import (see lib/sentry.ts) and
+// gives us Sentry.wrap below, which reports uncaught JS errors and basic
+// navigation/performance traces for the whole app.
+import { Sentry } from '../lib/sentry';
+
 // "export default" — this function is what Expo Router renders as the
 // root wrapper for the whole app.
-export default function RootLayout() {
+export default Sentry.wrap(function RootLayout() {
   // Grab the navigation object so we can redirect the user based on their
   // login/role status.
   const router = useRouter();
@@ -215,4 +220,4 @@ export default function RootLayout() {
       </GestureHandlerRootView>
     </SafeAreaProvider>
   );
-}
+});

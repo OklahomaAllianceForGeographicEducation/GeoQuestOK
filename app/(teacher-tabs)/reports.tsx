@@ -26,13 +26,13 @@ import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Platform,
     Pressable,
     RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
+    TextStyle,
     useColorScheme,
     View
 } from 'react-native';
@@ -45,6 +45,8 @@ import {
     FitnessResultEntry,
 } from '../../lib/activity';
 import { formatActivitySummary } from '../../lib/activityTypes';
+import { showAlert } from '../../lib/confirmAlert';
+import { escapeHtml } from '../../lib/htmlExport';
 import { fetchClassQuizGradeMatrix, QuizGradeMatrix } from '../../lib/quizzes';
 import { formatMiles } from '../../lib/trails';
 import { supabase } from '../../utils/supabase';
@@ -74,6 +76,7 @@ function CollapsibleSection({
     expanded,
     onToggle,
     theme,
+    detailHeadingStyle,
     children,
 }: {
     title: string;
@@ -81,12 +84,18 @@ function CollapsibleSection({
     expanded: boolean;
     onToggle: () => void;
     theme: typeof colors.light;
+    // The parent screen already has its own `getStyles(theme)` computed
+    // once per render — CollapsibleSection is instantiated 3x per expanded
+    // student row (quiz/fitness/activity), so recomputing the whole ~20+
+    // key page stylesheet from scratch in here just to read this one
+    // property would be wasteful. Passed down instead.
+    detailHeadingStyle: TextStyle;
     children: React.ReactNode;
 }) {
     return (
         <View style={{ marginTop: 14 }}>
             <Pressable style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }} onPress={onToggle} accessibilityRole="button" accessibilityState={{ expanded }} aria-expanded={expanded}>
-                <Text style={[getStyles(theme).detailHeading, { color: theme.subtext }]}>{expanded ? '▾' : '▸'} {title}</Text>
+                <Text style={[detailHeadingStyle, { color: theme.subtext }]}>{expanded ? '▾' : '▸'} {title}</Text>
                 {!expanded && <Text style={{ fontSize: 11, color: theme.subtext }}>{summary}</Text>}
             </Pressable>
             {expanded && <View style={{ marginTop: 6 }}>{children}</View>}
@@ -242,7 +251,7 @@ export default function SchoolReportsScreen() {
                 }
                 setFitnessByClassStudent((prev) => new Map(prev).set(classId, fitnessMap));
             } catch (err: any) {
-                Alert.alert('Load Error', err.message || 'Could not load quiz/fitness detail for this class.');
+                showAlert('Load Error', err.message || 'Could not load quiz/fitness detail for this class.');
             } finally {
                 setLoadingClassDetailFor((prev) => {
                     const next = new Set(prev);
@@ -268,7 +277,7 @@ export default function SchoolReportsScreen() {
                 const logs = await fetchStudentActivityLogs(studentId);
                 setActivityByStudent((prev) => new Map(prev).set(studentId, logs));
             } catch (err: any) {
-                Alert.alert('Load Error', err.message || 'Could not load this student’s activity log.');
+                showAlert('Load Error', err.message || 'Could not load this student’s activity log.');
             } finally {
                 setLoadingActivityFor((prev) => {
                     const next = new Set(prev);
@@ -467,16 +476,27 @@ export default function SchoolReportsScreen() {
                 ]);
 
                 // Other teachers/admins at this teacher's own school
-                // specifically (not the whole district).
-                const { data: colleaguesData, error: colleaguesError } = await supabase
-                    .from('profiles')
-                    .select('id, display_name, username, school_name, app_role')
-                    .eq('district_id', resolvedDistrictId)
-                    .eq('school_name', rawSchoolName)
-                    .in('app_role', ['teacher', 'admin'])
-                    .neq('id', user.id);
+                // specifically (not the whole district). Sourced from a
+                // SECURITY DEFINER RPC (not a direct `.from('profiles')`
+                // select) that returns only public-directory columns,
+                // pre-scoped server-side to the caller's own district — see
+                // supabase/fix-profiles-same-district-column-leak.sql.
+                type DistrictProfileRow = {
+                    id: string;
+                    username: string | null;
+                    display_name: string | null;
+                    school_name: string | null;
+                    app_role: string | null;
+                };
+                const { data: districtProfiles, error: colleaguesError } = await supabase.rpc('get_district_profiles_public');
 
                 if (colleaguesError) throw colleaguesError;
+
+                const colleaguesData: DistrictProfileRow[] = (districtProfiles || []).filter((row: DistrictProfileRow) =>
+                    row.school_name === rawSchoolName &&
+                    ['teacher', 'admin'].includes(row.app_role || '') &&
+                    row.id !== user.id
+                );
 
                 const sortedColleagues = (colleaguesData || []).slice().sort((a, b) => {
                     const aName = a.display_name || a.username || '';
@@ -549,14 +569,7 @@ export default function SchoolReportsScreen() {
 
         } catch (error: any) {
             console.error("Error synchronizing reports data:", error);
-            // Same web-vs-native alert branching pattern seen in
-            // app/login.tsx's showAlert helper, just written inline here
-            // instead of as a separate reusable function.
-            if (Platform.OS === 'web') {
-                window.alert(`Could not load reports: ${error.message}`);
-            } else {
-                Alert.alert('Could Not Load Reports', error.message);
-            }
+            showAlert('Could Not Load Reports', error.message);
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -614,8 +627,8 @@ export default function SchoolReportsScreen() {
             // of the detailed per-class tables below.
             const classRowsHtml = classBreakdown.map((c) => `
                 <tr style="border-bottom: 1px solid #ddd;">
-                    <td style="padding: 10px; font-weight: bold;">${c.class_name}</td>
-                    <td style="padding: 10px; color:#666;">${c.join_code || c.id}</td>
+                    <td style="padding: 10px; font-weight: bold;">${escapeHtml(c.class_name)}</td>
+                    <td style="padding: 10px; color:#666;">${escapeHtml(c.join_code || c.id)}</td>
                     <td style="padding: 10px; text-align: center;">${c.member_count}</td>
                     <td style="padding: 10px; text-align: right;">${formatMiles(c.avg_miles)} mi</td>
                     <td style="padding: 10px; text-align: right; font-weight: bold; color: #DE9027;">${formatMiles(c.total_miles)} mi</td>
@@ -627,7 +640,7 @@ export default function SchoolReportsScreen() {
             // attempted), plus miles and a fitness-test summary.
             const classSectionsHtml = classSections.map(({ classInfo: c, matrix, fitnessByStudent }) => {
                 const quizHeaderCells = matrix.assignments
-                    .map((a) => `<th style="text-align:center; font-size:11px;">${a.landmarkTitle}</th>`)
+                    .map((a) => `<th style="text-align:center; font-size:11px;">${escapeHtml(a.landmarkTitle)}</th>`)
                     .join('');
 
                 const studentRowsHtml = c.members.map((student) => {
@@ -645,7 +658,7 @@ export default function SchoolReportsScreen() {
 
                     return `
                         <tr style="border-bottom: 1px solid #ddd;">
-                            <td style="padding: 8px; font-weight: bold;">${student.display_name || student.username || 'Anonymous'}</td>
+                            <td style="padding: 8px; font-weight: bold;">${escapeHtml(student.display_name || student.username || 'Anonymous')}</td>
                             <td style="padding: 8px; text-align: right;">${formatMiles(Number(student.total_miles_walked || 0))} mi</td>
                             ${quizCells}
                             <td style="padding: 8px; text-align: center;">${fitnessCell}</td>
@@ -654,7 +667,7 @@ export default function SchoolReportsScreen() {
                 }).join('');
 
                 return `
-                    <h3>${c.class_name} <span style="font-size:12px; font-weight:normal; color:#666;">(Code: ${c.join_code || c.id})</span></h3>
+                    <h3>${escapeHtml(c.class_name)} <span style="font-size:12px; font-weight:normal; color:#666;">(Code: ${escapeHtml(c.join_code || c.id)})</span></h3>
                     <table>
                         <thead>
                             <tr>
@@ -680,7 +693,7 @@ export default function SchoolReportsScreen() {
                     <head><style>body{font-family:sans-serif; padding:20px;} table{width:100%; border-collapse:collapse; margin-bottom: 20px;} th{background:#f4f4f4; padding:8px; text-align:left; font-size:12px;} h2{margin-bottom:4px;} h3{margin-top:24px; margin-bottom:8px; color:#4E3629;}</style></head>
                     <body>
                         <h2>Grade Summary Report</h2>
-                        <p><b>Teacher's School:</b> ${schoolName} &middot; <b>Date:</b> ${new Date().toLocaleDateString()}</p>
+                        <p><b>Teacher's School:</b> ${escapeHtml(schoolName)} &middot; <b>Date:</b> ${new Date().toLocaleDateString()}</p>
                         <p style="font-size:12px; color:#666;">✓ = correct &middot; ✗ = incorrect &middot; — = not attempted. Fitness column shows targets met out of exercises logged.</p>
 
                         <h3 style="margin-top:0;">My Classes Overview</h3>
@@ -719,11 +732,7 @@ export default function SchoolReportsScreen() {
                 await Print.printAsync({ html: htmlContent });
             }
         } catch (error: any) {
-            if (Platform.OS === 'web') {
-                window.alert(`Export Failed: ${error.message}`);
-            } else {
-                Alert.alert("Export Failed", error.message);
-            }
+            showAlert('Export Failed', error.message);
         } finally {
             setExporting(false);
         }
@@ -858,6 +867,7 @@ export default function SchoolReportsScreen() {
                                                                                 expanded={expandedDetailKeys.has(quizKey)}
                                                                                 onToggle={() => toggleDetailKey(quizKey)}
                                                                                 theme={theme}
+                                                                                detailHeadingStyle={styles.detailHeading}
                                                                             >
                                                                                 {!matrix || matrix.assignments.length === 0 ? (
                                                                                     <Text style={styles.detailEmptyText}>No quizzes assigned to this class yet.</Text>
@@ -865,7 +875,7 @@ export default function SchoolReportsScreen() {
                                                                                     matrix.assignments.map((a) => {
                                                                                         const status = studentGrades?.get(a.assignmentId) ?? 'not_attempted';
                                                                                         const statusLabel = status === 'correct' ? '✅ Correct' : status === 'incorrect' ? '❌ Incorrect' : '⏳ Not attempted';
-                                                                                        const statusColor = status === 'correct' ? '#3A8F52' : status === 'incorrect' ? '#C1443A' : theme.subtext;
+                                                                                        const statusColor = status === 'correct' ? theme.secondary : status === 'incorrect' ? theme.error : theme.subtext;
                                                                                         return (
                                                                                             <View key={a.assignmentId} style={styles.detailRow}>
                                                                                                 <Text style={{ fontSize: 13, color: theme.text, flex: 1, paddingRight: 8 }}>{a.landmarkTitle}</Text>
@@ -882,6 +892,7 @@ export default function SchoolReportsScreen() {
                                                                                 expanded={expandedDetailKeys.has(fitnessKey)}
                                                                                 onToggle={() => toggleDetailKey(fitnessKey)}
                                                                                 theme={theme}
+                                                                                detailHeadingStyle={styles.detailHeading}
                                                                             >
                                                                                 {fitnessEntries.length === 0 ? (
                                                                                     <Text style={styles.detailEmptyText}>No fitness test results logged yet.</Text>
@@ -895,7 +906,7 @@ export default function SchoolReportsScreen() {
                                                                                                     {new Date(entry.loggedAt).toLocaleDateString()}
                                                                                                 </Text>
                                                                                             </Text>
-                                                                                            <Text style={{ fontSize: 12, fontWeight: '700', color: entry.isTargetMet ? '#3A8F52' : '#C1443A' }}>
+                                                                                            <Text style={{ fontSize: 12, fontWeight: '700', color: entry.isTargetMet ? theme.secondary : theme.error }}>
                                                                                                 {entry.exerciseScore ?? '—'} {entry.isTargetMet ? '✅ Target Met' : '❌ Below Target'}
                                                                                             </Text>
                                                                                         </View>
@@ -909,6 +920,7 @@ export default function SchoolReportsScreen() {
                                                                                 expanded={expandedDetailKeys.has(activityKey)}
                                                                                 onToggle={() => toggleDetailKey(activityKey)}
                                                                                 theme={theme}
+                                                                                detailHeadingStyle={styles.detailHeading}
                                                                             >
                                                                                 {loadingActivityFor.has(student.id) ? (
                                                                                     <ActivityIndicator size="small" color={theme.accent} style={{ marginTop: 8 }} />
@@ -1024,9 +1036,19 @@ export default function SchoolReportsScreen() {
                                         {/* Schools with zero participants
                                             show an orange/red "recruit"
                                             call-to-action message instead
-                                            of the normal member-count line. */}
+                                            of the normal member-count line.
+                                            The same color/copy pattern is
+                                            reused in (admin-tabs)/schools.tsx
+                                            and (site-admin-tabs)/district.tsx.
+                                            Color darkened from the original
+                                            #E07A5F (2.95:1 on white, failing
+                                            AA) to #A34E36 (5.68:1) -- caught
+                                            during a pre-alpha /impeccable
+                                            audit; fixed in all three places
+                                            at once since it's one shared,
+                                            deliberate token, not drift. */}
                                         {school.isEmptyInvitation ? (
-                                            <Text style={{ fontSize: 12, color: '#E07A5F', fontWeight: '600' }}>
+                                            <Text style={{ fontSize: 12, color: '#A34E36', fontWeight: '600' }}>
                                                 No active users yet 🚀 Recruit a friend!
                                             </Text>
                                         ) : (

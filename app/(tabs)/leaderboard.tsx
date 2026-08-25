@@ -1,10 +1,10 @@
 // app/(tabs)/leaderboard.tsx
 // Shows a ranked leaderboard of students by total miles walked, with a
 // "podium" for the top 3 and a scrollable list for everyone else. Supports
-// filtering by "My Network" (everyone) or by a specific class the student
-// belongs to.
+// filtering by "My Network" (everyone the student shares a class with) or
+// by one specific class the student belongs to.
 import { useEffect, useState } from 'react';
-import { Text, View, ScrollView, Pressable, Alert, ActivityIndicator, useColorScheme } from 'react-native';
+import { Text, View, ScrollView, Pressable, ActivityIndicator, useColorScheme } from 'react-native';
 
 // Expo's optimized Image component (better caching/performance for remote
 // images than React Native's built-in <Image>), used here for avatar
@@ -18,6 +18,7 @@ import { supabase } from '../../utils/supabase';
 // generates a large, leaderboard-specific style object based on the
 // current color theme.
 import { colors, getLeaderboardStyles } from '../../commonStyles';
+import { showAlert } from '../../lib/confirmAlert';
 
 // Describes one row on the leaderboard.
 export type LeaderboardEntry = {
@@ -149,40 +150,52 @@ export default function LeaderboardScreen() {
                 // than `undefined`, for a consistent comparison later.
                 const uid = session?.user?.id || null;
 
-                // Setup baseline query targeting profiles sorted by mileage
-                // NOTE: this doesn't call .then()/await yet — Supabase
-                // query builders let you keep chaining .eq()/.in() calls
-                // onto the same `query` variable before finally executing
-                // it, which is exactly what happens conditionally below.
-                let query = supabase
-                    .from('profiles')
-                    .select('id, username, display_name, total_miles_walked, avatar_seed')
-                    .order('total_miles_walked', { ascending: false });
+                // Rows come from a SECURITY DEFINER RPC rather than a
+                // direct `.from('profiles')` select — the RPC returns only
+                // the columns a leaderboard needs (id/username/display_name/
+                // total_miles_walked/avatar_seed), pre-scoped server-side to
+                // everyone who shares at least one class with the caller
+                // (i.e. classmates only, not the whole district). This
+                // deliberately avoids a broad table-level policy that would
+                // otherwise expose a classmate's full profile row
+                // (birth_date, etc.) just to render a mileage ranking. See
+                // supabase/scope-leaderboard-to-classmates.sql and
+                // supabase/fix-profiles-same-district-column-leak.sql.
+                // Already sorted highest-miles-first server-side.
+                type ClassmateProfileRow = {
+                    id: string;
+                    username: string | null;
+                    display_name: string | null;
+                    total_miles_walked: number | null;
+                    avatar_seed: string | null;
+                    school_name: string | null;
+                    app_role: string | null;
+                };
+                const { data: classmateRows, error } = await supabase.rpc('get_my_classmates_profiles_public');
+                if (error) throw error;
+
+                let data: ClassmateProfileRow[] = classmateRows || [];
 
                 if (activeGroup !== 'all') {
                     // Filter down rows to only include profiles associated with the active group channel
-                    const { data: userIdsInGroup } = await supabase
+                    const { data: userIdsInGroup, error: membershipError } = await supabase
                         .from('class_memberships')
                         .select('user_id')
                         .eq('class_id', activeGroup);
+                    if (membershipError) throw membershipError;
 
-                    const targetIds = (userIdsInGroup || []).map(row => row.user_id);
-                    if (targetIds.length === 0) {
+                    const targetIds = new Set((userIdsInGroup || []).map(row => row.user_id));
+                    if (targetIds.size === 0) {
                         // Nobody is in this class — show an empty
                         // leaderboard rather than querying with an empty
                         // id list (which could behave unpredictably).
                         setEntries([]);
                         return;
                     }
-                    // .in('id', targetIds) narrows the profiles query down
-                    // to WHERE id IN (targetIds) — only members of this
-                    // specific class.
-                    query = query.in('id', targetIds);
+                    // Order from the RPC (highest-miles-first) is preserved
+                    // by .filter(), so rank still comes out correct below.
+                    data = data.filter(row => targetIds.has(row.id));
                 }
-
-                // Now actually execute the (possibly filtered) query.
-                const { data, error } = await query;
-                if (error) throw error;
 
                 // Transform each raw database row into the LeaderboardEntry
                 // shape the UI expects. `(data || [])` guards against
@@ -218,7 +231,7 @@ export default function LeaderboardScreen() {
 
                 setEntries(mappedEntries);
             } catch (err: any) {
-                Alert.alert('Error loading rankings', err.message);
+                showAlert('Error loading rankings', err.message);
             } finally {
                 setLoading(false);
             }
@@ -309,7 +322,7 @@ export default function LeaderboardScreen() {
                 "My Network") stays usable. */}
             {groupsError && (
                 <Text style={{ color: theme.subtext, fontSize: 12, textAlign: 'center', marginTop: 4, marginBottom: 8 }}>
-                    Couldn't load your classes: {groupsError}
+                    Couldn&apos;t load your classes: {groupsError}
                 </Text>
             )}
 

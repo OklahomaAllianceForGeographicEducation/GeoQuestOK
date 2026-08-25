@@ -18,23 +18,28 @@ export default function WebFooter() {
         // "always-dark footer" pattern), so it doesn't switch with scheme
         // the way the rest of the marketing site now does. See the note on
         // dark.darkBand in webBrand.ts.
-        <View style={[styles.footer, { backgroundColor: BRAND.light.darkBand }]}>
+        <View role="contentinfo" style={[styles.footer, { backgroundColor: BRAND.light.darkBand }]}>
             <View style={[styles.footerInner, isWide && { flexDirection: 'row' }]}>
                 <View style={styles.footerBrandBlock}>
                     <Text style={styles.footerWordmark}>GeoQuestOK</Text>
                     <Text style={styles.footerTagline}>Blending fitness, geography, and history for Oklahoma students. </Text>
                 </View>
-                {/* No Contact link for now: the /contact page (backed by a
-                    new Supabase table + RLS policy) was pulled since a raw
-                    SQL table isn't the org's preferred way to receive these
-                    -- and its predecessor, a personal Gmail mailto:, is a
-                    known trust-signal problem, so it isn't reinstated here
-                    either. Revisit once there's a real destination for it. */}
+                {/* Contact re-added now that app/contact.tsx has a real
+                    destination -- a static page with no form/database
+                    behind it (see that file's header comment for why the
+                    earlier Supabase-table and personal-Gmail-mailto:
+                    versions were pulled). */}
                 <View style={styles.footerLinksBlock}>
                     <Pressable onPress={() => router.push('/teachers' as any)} style={styles.footerLinkWrap} accessibilityRole="link"><Text style={styles.footerLink}>For Teachers</Text></Pressable>
+                    <Pressable onPress={() => router.push('/contact' as any)} style={styles.footerLinkWrap} accessibilityRole="link"><Text style={styles.footerLink}>Contact</Text></Pressable>
                     <Pressable onPress={() => router.push('/login')} style={styles.footerLinkWrap} accessibilityRole="link"><Text style={styles.footerLink}>Log In</Text></Pressable>
                     <Pressable onPress={() => router.push('/signup')} style={styles.footerLinkWrap} accessibilityRole="link"><Text style={styles.footerLink}>Sign Up</Text></Pressable>
                 </View>
+            </View>
+            <View style={styles.footerLegalRow}>
+                <Pressable onPress={() => router.push('/privacy-policy' as any)} style={styles.footerLinkWrap} accessibilityRole="link"><Text style={styles.footerLegalLink}>Privacy Policy</Text></Pressable>
+                <Text style={styles.footerLegalDivider}>·</Text>
+                <Pressable onPress={() => router.push('/terms' as any)} style={styles.footerLinkWrap} accessibilityRole="link"><Text style={styles.footerLegalLink}>Terms and Conditions</Text></Pressable>
             </View>
             <Text style={styles.footerCopyright}>© 2026 Oklahoma Alliance for Geographic Education. All rights reserved.</Text>
         </View>
@@ -58,6 +63,12 @@ const styles = StyleSheet.create({
     // clear 44px with margin.
     footerLinkWrap: { paddingVertical: 14, paddingHorizontal: 12 },
     footerLink: { color: '#EFE6DA', fontSize: 14, fontWeight: '600' },
+    // Small, quiet legal-links row -- deliberately less prominent than the
+    // primary nav links above it (smaller text, muted color), matching the
+    // "footer legal links are understated" convention most sites use.
+    footerLegalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', marginTop: -8, marginBottom: 16 },
+    footerLegalLink: { color: '#B79E7C', fontSize: 12.5, fontWeight: '600', textDecorationLine: 'underline' },
+    footerLegalDivider: { color: '#6A5C48', fontSize: 12.5, marginHorizontal: 2 },
     footerCopyright: {
         fontSize: 11.5,
         // Lightened from #8A7A63 (~4.0:1 against darkBand, just under the

@@ -1032,7 +1032,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     questionMeta: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6, marginBottom: 4, textTransform: 'uppercase' },
     questionText: { fontSize: 14, fontWeight: '600', lineHeight: 19 },
     answerChoice: { fontSize: 12, lineHeight: 17 },
-    answerChoiceCorrect: { fontWeight: '700', color: '#3A8F52' },
+    answerChoiceCorrect: { fontWeight: '700', color: theme.secondary },
     assignToggle: {
         flexDirection: 'row',
         alignItems: 'center',

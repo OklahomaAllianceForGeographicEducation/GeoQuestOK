@@ -1,4 +1,26 @@
 // app/teachers.tsx
+//
+// WHAT THIS SCREEN IS: a marketing/info page aimed specifically at
+// teachers, school administrators, and youth/club leaders — a deeper pitch
+// for the classroom side of GeoQuestOK than the general homepage gives.
+//
+// HOW IT'S REACHED: Expo Router maps a file at app/teachers.tsx directly to
+// the route "/teachers" — the file's name (minus .tsx) becomes the URL
+// path. app/index.web.tsx's "Ready to use GeoQuestOK in your classroom?"
+// banner links here via `router.push('/teachers' as any)`, and WebNav
+// (the shared top nav bar) presumably links here too.
+//
+// WHAT THIS FILE DOES: renders a single scrollable page — a hero band, a
+// classroom-features grid, a 3-step "getting started" list, a collapsible
+// FAQ accordion, an outbound "additional resources" link list, and a final
+// call-to-action band — finishing with the shared footer. Every button
+// either pushes the user to /signup or /login via expo-router's
+// router.push(), or opens an external URL via React Native's Linking API.
+// There's no data fetching or Supabase usage anywhere on this screen — all
+// the copy (CLASSROOM_FEATURES, GETTING_STARTED_STEPS, FAQ_ITEMS,
+// RESOURCE_LINKS below) is hardcoded directly in this file. The one bit of
+// local interactivity is the FAQ accordion, tracked with a single
+// useState hook (see openFaqId below).
 
 // EDITING THIS PAGE: the FAQ_ITEMS and RESOURCE_LINKS arrays below are the
 // two things most likely to change over time — edit the text in those
@@ -7,24 +29,52 @@
 // alternating sections, closing CTA band, shared footer).
 
 import { Ionicons } from '@expo/vector-icons';
+// useRouter() is expo-router's hook for *programmatic* navigation —
+// calling router.push('/signup') etc. from inside an onPress handler,
+// rather than using a declarative <Link> element.
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+    // Linking is React Native's API for opening URLs outside the app —
+    // used below to send the FAQ/resource links to an external website in
+    // the device/browser's normal web browser.
     Linking,
+    // Pressable is React Native's generic "make anything tappable"
+    // wrapper — used throughout this file for every button, FAQ row, and
+    // outbound link.
     Pressable,
+    // ScrollView lets its content scroll vertically when it's taller than
+    // the screen — the whole page is wrapped in one, same as index.web.tsx.
     ScrollView,
+    // StyleSheet.create() is React Native's way of defining reusable style
+    // objects, grouped by section near the bottom of this file.
     StyleSheet,
+    // Text is required in React Native to render any visible text.
     Text,
+    // useColorScheme() reports whether the device/browser is currently in
+    // light or dark mode, re-rendering automatically if it changes.
     useColorScheme,
+    // useWindowDimensions() returns the current window width/height and
+    // re-renders this component whenever the window is resized — this is
+    // what drives the `isWide` responsive breakpoint below.
     useWindowDimensions,
+    // View is React Native's basic layout container, the equivalent of a
+    // plain <div>.
     View,
 } from 'react-native';
+// Shared web-only chrome, reused across every page of the marketing site.
 import WebFooter from '../components/web/WebFooter';
 import WebNav from '../components/web/WebNav';
+// BRAND is the light/dark color-token object for this public-facing
+// marketing site's visual identity (distinct from the app's main
+// colors/commonStyles theme used inside the authenticated app).
 import { BRAND } from '../components/web/webBrand';
 
 // What GeoQuestOK actually gives a classroom, grounded in the real
-// teacher-facing screens (classes, curriculum, reports).
+// teacher-facing screens (classes, curriculum, reports). Kept as plain
+// data (rather than four hardcoded JSX blocks) so the "CLASSROOM FEATURES"
+// section further down can render it with one `.map()` call — `icon`
+// values are Ionicons glyph names.
 const CLASSROOM_FEATURES = [
     {
         id: 'classes',
@@ -52,6 +102,9 @@ const CLASSROOM_FEATURES = [
     },
 ];
 
+// The 3-step onboarding list shown in the "GETTING STARTED" section.
+// Rendered via `.map()` too, with each step's array index used to number
+// it (1, 2, 3) in the JSX below rather than storing the number here.
 const GETTING_STARTED_STEPS = [
     {
         id: 'signup',
@@ -113,20 +166,47 @@ const FAQ_ITEMS = [
 ];
 
 // EDIT THESE: add more resource links as they come up — same shape,
-// { label, url }.
+// { label, url }. Rendered as tappable outbound links in the "ADDITIONAL
+// RESOURCES" section, each opening its `url` via Linking.openURL().
 const RESOURCE_LINKS = [
     { id: 'okage', label: 'Oklahoma Alliance for Geographic Education', url: 'https://okageweb.org/' },
     { id: 'osde', label: 'Oklahoma State Department of Education', url: 'https://oklahoma.gov/education.html' },
 ];
 
+// The default export is the actual screen component that Expo Router
+// renders for the "/teachers" route (see the file-level comment at top).
+// It takes no props and renders the full scrollable teacher-info page.
 export default function TeachersInfoPage() {
+    // Gives this component access to expo-router's imperative navigation
+    // methods — used below as router.push('/signup') / router.push('/login')
+    // when a hero/CTA button is tapped.
     const router = useRouter();
+    // Destructures just `width` out of the hook's {width, height} object.
+    // Re-renders this component whenever the browser window is resized.
     const { width: windowWidth } = useWindowDimensions();
+    // `?? 'light'` supplies a fallback since useColorScheme() can return
+    // null before the system preference is known.
     const scheme = useColorScheme() ?? 'light';
+    // Looks up the full set of color tokens for whichever scheme is active.
     const theme = BRAND[scheme];
+    // The same 900px responsive breakpoint used throughout index.web.tsx:
+    // anything 900px or wider switches several sections from a stacked
+    // mobile layout to a wider desktop one.
     const isWide = windowWidth >= 900;
+    // Tracks which single FAQ row (if any) is currently expanded, by its
+    // `id`. Starts pre-opened on the FIRST FAQ item (FAQ_ITEMS[0]?.id) so
+    // the accordion doesn't look empty/unused on first load; `null` means
+    // no answer text is currently showing. Only one row can be open at a
+    // time — clicking a different question's row replaces this value
+    // rather than appending to a list, which is what collapses whichever
+    // row was previously open.
     const [openFaqId, setOpenFaqId] = useState<string | null>(FAQ_ITEMS[0]?.id ?? null);
 
+    // Opens an external (off-app) URL — used both for FAQ answer links and
+    // the "ADDITIONAL RESOURCES" list. Linking.openURL() returns a Promise
+    // that rejects if the URL can't be opened; the .catch() here silently
+    // swallows that failure since an external link failing to open isn't
+    // critical to anything else on this page.
     const openExternalLink = (url: string) => {
         Linking.openURL(url).catch(() => { /* no-op: best-effort external link */ });
     };
@@ -165,11 +245,20 @@ export default function TeachersInfoPage() {
             </View>
 
             {/* ── CLASSROOM FEATURES ──────────────────────────────── */}
+            {/* One h2 heading followed by a grid of cards built by mapping
+                over the CLASSROOM_FEATURES array declared near the top of
+                this file. */}
             <View style={[styles.section, { backgroundColor: theme.surfaceBase }]}>
                 <View style={styles.sectionInner}>
                     <Text style={[styles.sectionHeading, { color: theme.ink, fontSize: isWide ? 32 : 25 }]} accessibilityRole="header" aria-level={2}>Built with everything you need</Text>
 
                     <View style={[styles.featureGrid, isWide && styles.featureGridWide]}>
+                        {/* .map() renders one <View> card per entry in
+                            CLASSROOM_FEATURES. `key={feature.id}` is
+                            required by React for list rendering — it uses
+                            each feature's stable `id` field rather than the
+                            array index, so React can correctly track which
+                            card is which across re-renders. */}
                         {CLASSROOM_FEATURES.map((feature) => (
                             <View key={feature.id} style={[styles.featureCard, isWide && styles.featureCardWide, { backgroundColor: theme.surfaceRaised, borderColor: theme.border }]}>
                                 <View style={[styles.featureIconBadge, scheme === 'dark' && { backgroundColor: theme.border }]}>
@@ -184,6 +273,11 @@ export default function TeachersInfoPage() {
             </View>
 
             {/* ── GETTING STARTED ─────────────────────────────────── */}
+            {/* A numbered 3-step list built from GETTING_STARTED_STEPS.
+                `.map((step, index) => ...)` uses the second callback
+                argument (the array index) to compute a display number —
+                `index + 1` turns the zero-based array position (0, 1, 2)
+                into the human-friendly "1", "2", "3" shown in each badge. */}
             <View style={[styles.section, { backgroundColor: theme.surfaceRaised }]}>
                 <View style={styles.sectionInner}>
                     <Text style={[styles.sectionHeading, { color: theme.ink, fontSize: isWide ? 32 : 25 }]} accessibilityRole="header" aria-level={2}>Set up is as easy as 1 2 3</Text>
@@ -205,15 +299,33 @@ export default function TeachersInfoPage() {
             </View>
 
             {/* ── FAQ ─────────────────────────────────────────────── */}
+            {/* A collapsible accordion built from FAQ_ITEMS. Each row's
+                open/closed state is derived from comparing `openFaqId`
+                (the single piece of state declared above) against this
+                row's own `item.id` — so only ONE row can ever be expanded
+                at a time, and tapping an already-open row's question
+                collapses it by setting openFaqId back to null. */}
             <View style={[styles.section, { backgroundColor: theme.surfaceBase }]}>
                 <View style={styles.sectionInner}>
                     <Text style={[styles.sectionHeading, { color: theme.ink, fontSize: isWide ? 32 : 25 }]} accessibilityRole="header" aria-level={2}>Questions? We have answers!</Text>
 
                     <View style={[styles.faqList, { borderTopColor: theme.border }]}>
                         {FAQ_ITEMS.map((item) => {
+                            // Whether THIS specific row is the currently-open
+                            // one — recalculated for every item on every
+                            // render of this component.
                             const isOpen = openFaqId === item.id;
                             return (
                                 <View key={item.id} style={[styles.faqRow, { borderBottomColor: theme.border }]}>
+                                    {/* Tapping the question row toggles this
+                                        row's open state: if it's already
+                                        open, close it (null); otherwise open
+                                        THIS row (which implicitly closes
+                                        whatever other row was open, since
+                                        openFaqId can only hold one id at a
+                                        time). aria-expanded tells assistive
+                                        tech whether the answer below is
+                                        currently visible. */}
                                     <Pressable
                                         onPress={() => setOpenFaqId(isOpen ? null : item.id)}
                                         style={styles.faqQuestionRow}
@@ -227,9 +339,21 @@ export default function TeachersInfoPage() {
                                             color={theme.pineAccent}
                                         />
                                     </Pressable>
+                                    {/* The answer text (and, for the last
+                                        FAQ item, an outbound "Visit the
+                                        OKAGE website" link) only renders at
+                                        all while this row is open — when
+                                        `isOpen` is false this whole block
+                                        evaluates to false/nothing, so it
+                                        isn't just hidden, it isn't mounted. */}
                                     {isOpen && (
                                         <View style={styles.faqAnswerBlock}>
                                             <Text style={[styles.faqAnswerText, { color: theme.body }]}>{item.answer}</Text>
+                                            {/* linkUrl/linkLabel are optional
+                                                fields on FAQ_ITEMS — most rows
+                                                don't have them, so this link
+                                                only renders for the one item
+                                                (about-okage) that does. */}
                                             {item.linkUrl && (
                                                 <Pressable onPress={() => openExternalLink(item.linkUrl)} accessibilityRole="link">
                                                     <Text style={[styles.faqAnswerLink, { color: theme.pineAccent }]}>{item.linkLabel} →</Text>
@@ -245,6 +369,13 @@ export default function TeachersInfoPage() {
             </View>
 
             {/* ── ADDITIONAL RESOURCES ────────────────────────────── */}
+            {/* Renders one tappable outbound link per entry in
+                RESOURCE_LINKS. Tapping calls openExternalLink() (defined
+                above), which hands the URL off to the OS/browser via
+                Linking. The `style` prop here is a FUNCTION, not a plain
+                object — Pressable supports passing a function that
+                receives { pressed } so the row can dim slightly (opacity
+                0.7) while actively being pressed. */}
             <View style={[styles.section, { backgroundColor: theme.surfaceRaised }]}>
                 <View style={styles.sectionInner}>
                     <Text style={[styles.sectionHeading, { color: theme.ink, fontSize: isWide ? 32 : 25, marginBottom: 20 }]} accessibilityRole="header" aria-level={2}>Learn more beyond the app.</Text>
@@ -266,6 +397,9 @@ export default function TeachersInfoPage() {
             </View>
 
             {/* ── FINAL CTA BAND ──────────────────────────────────── */}
+            {/* Last chance to convert a scrolling teacher/administrator
+                into a signup, right before the shared footer — mirrors
+                index.web.tsx's own final CTA band. */}
             <View style={[styles.ctaBand, { backgroundColor: theme.heroBg }]}>
                 <Text style={[styles.ctaHeading, { fontSize: isWide ? 34 : 24 }]} accessibilityRole="header" aria-level={2}>Ready to bring GeoQuestOK to your classroom?</Text>
                 <Pressable onPress={() => router.push('/signup')} style={styles.ctaButton} accessibilityRole="link">
@@ -273,16 +407,21 @@ export default function TeachersInfoPage() {
                 </Pressable>
             </View>
 
+            {/* Shared footer, reused across the whole marketing site. */}
             <WebFooter />
         </ScrollView>
     );
 }
 
+// StyleSheet.create() groups every style object this screen uses into one
+// place, organized below by which section of the page each group belongs
+// to (mirrors index.web.tsx's own section-by-section style grouping).
 const styles = StyleSheet.create({
+    // -- root scroll container styles --
     root: { flex: 1 },
     rootContent: { flexGrow: 1 },
 
-    // HERO
+    // -- HERO band styles (headline, subtitle, CTA buttons) --
     hero: { width: '100%', paddingVertical: 64, paddingHorizontal: 24 },
     // maxWidth matches sectionInner below (and the homepage hero) so the
     // headline's left edge lines up with every other section on the page

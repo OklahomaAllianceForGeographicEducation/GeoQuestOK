@@ -11,6 +11,17 @@ import { BlurView } from 'expo-blur';
 import { useEffect, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
+// AdaptiveBlur
+// Takes no props. A per-platform "fill the parent with a blur/scrim" layer:
+//   - Android: a flat semi-transparent dark View (real blur is unreliable
+//     there, see comment below).
+//   - iOS: expo-blur's native BlurView, which iOS itself animates in.
+//   - web: expo-blur's BlurView (CSS backdrop-filter under the hood), with
+//     a manual opacity fade-in added here since the web CSS blur otherwise
+//     just pops in instantly.
+// Returns: a single View or BlurView element sized via
+// StyleSheet.absoluteFillObject, so it always fills whatever positioned
+// parent renders it (that parent must establish the size/position).
 export default function AdaptiveBlur() {
     // On web, expo-blur just sets the CSS backdrop-filter directly, so the
     // blur pops in at full strength the instant the modal mounts -- an
@@ -18,7 +29,16 @@ export default function AdaptiveBlur() {
     // modals for free (iOS animates BlurView's presentation itself; Android
     // uses the flat scrim below). Fading opacity in over a couple hundred ms
     // after mount gets web much closer to that same natural feel.
+    // React state: `blurVisible` tracks whether the fade-in should have
+    // completed. On native (iOS/Android) it starts (and stays) `true` since
+    // this fade trick is web-only; on web it starts `false` so the first
+    // render paints at opacity 0, then flips to `true` once the effect
+    // below runs, triggering the CSS transition.
     const [blurVisible, setBlurVisible] = useState(Platform.OS !== 'web');
+    // useEffect with an empty dependency array ([]) runs its callback once,
+    // right after the component's first mount, and never again (there are
+    // no reactive values it depends on). This is where the delayed
+    // "become visible" animation is kicked off for web only.
     useEffect(() => {
         if (Platform.OS !== 'web') return;
         // Two rAFs (rather than one) guarantee the browser has actually

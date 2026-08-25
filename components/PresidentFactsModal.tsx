@@ -1,9 +1,19 @@
 // components/PresidentFactsModal.tsx
-// A light, swipeable "did you know" card deck of presidential visits to
-// Oklahoma -- the reward content unlocked by finishing the Presidential
-// Fitness Challenge (see lib/presidentVisits.ts). Deliberately NOT a quiz
-// and NOT tied to academic standards: just fun facts, styled to match the
-// Field Journal's parchment look on the Passport screen.
+//
+// FILE OVERVIEW
+// -------------
+// Component: PresidentFactsModal (default export)
+// Platform: SHARED -- a single implementation of react-native primitives
+//   (Modal, Pressable, Text, View) that renders the same on iOS, Android,
+//   and web. There is no `.native.tsx` / `.web.tsx` split here.
+// Responsibility: a light, swipeable "did you know" card deck of
+//   presidential visits to Oklahoma -- the reward content unlocked by
+//   finishing the Presidential Fitness Challenge (see
+//   lib/presidentVisits.ts). Deliberately NOT a quiz and NOT tied to
+//   academic standards: just fun facts, styled to match the Field Journal's
+//   parchment look on the Passport screen. Facts are fetched once when the
+//   modal opens, and the student pages through them one at a time with
+//   next/back arrows.
 
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
@@ -18,18 +28,55 @@ import {
 import { fetchPresidentVisitFacts, type PresidentVisitFact } from '../lib/presidentVisits';
 import ModalBackdrop from './ModalBackdrop';
 
+// PresidentFactsModal
+// --------------------
+// Purpose: show a full-screen (but visually card-like) modal presenting a
+// deck of presidential-visit fun facts, one at a time, with pager controls
+// to move forward/back through them.
+//
+// Props:
+// - visible: whether the modal should currently be shown. Also acts as the
+//   trigger for (re)loading facts -- see the useEffect below.
+// - onClose: called when the student taps the backdrop or the "Return to
+//   Logbook" button, so the parent can hide this modal.
+//
+// Returns: a <Modal> containing a parchment-styled card. The card shows one
+// of four mutually exclusive states depending on data-loading progress: a
+// spinner (loading), an error message (load failed), a "no facts yet"
+// message (loaded but empty), or the current fact plus pager controls.
 export default function PresidentFactsModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+    // Whether the initial fetch of facts is still in flight. Starts true so
+    // the very first render (before the effect below has a chance to run)
+    // shows a spinner instead of a flash of empty content.
     const [loading, setLoading] = useState(true);
+    // The full list of facts fetched from Supabase (via
+    // fetchPresidentVisitFacts). Empty until the fetch resolves.
     const [facts, setFacts] = useState<PresidentVisitFact[]>([]);
+    // Which fact in `facts` is currently being displayed (0-based). Reset to
+    // 0 every time the modal is (re)opened, so a student always starts at
+    // the first fact rather than wherever they left off last time.
     const [index, setIndex] = useState(0);
+    // Holds a human-readable error message if the fetch fails; null means
+    // "no error." Shown instead of a fact card when non-null.
     const [loadError, setLoadError] = useState<string | null>(null);
 
+    // Loads (or reloads) the fact deck every time the modal transitions to
+    // visible. Guarded by `if (!visible) return` so this does nothing while
+    // the modal is hidden -- it only fires on the render where `visible`
+    // flips from false to true (or is true on first mount). Resetting
+    // `index` to 0 here (rather than inside loadFacts) ensures the pager
+    // position resets immediately, without waiting on the network request.
     useEffect(() => {
         if (!visible) return;
         setIndex(0);
         void loadFacts();
     }, [visible]);
 
+    // Fetches the list of presidential-visit facts and updates state
+    // accordingly. Not memoized with useCallback since it's only ever
+    // invoked from the effect above (and only while this component is
+    // mounted), so there's no risk of it going stale or causing extra
+    // effect re-runs.
     async function loadFacts() {
         try {
             setLoading(true);
@@ -37,22 +84,41 @@ export default function PresidentFactsModal({ visible, onClose }: { visible: boo
             const rows = await fetchPresidentVisitFacts();
             setFacts(rows);
         } catch (err: any) {
+            // err.message may be undefined for non-Error throws, hence the
+            // fallback string.
             setLoadError(err.message || 'Could not load these facts right now.');
         } finally {
             setLoading(false);
         }
     }
 
+    // The fact currently on screen (undefined if `facts` is empty or index
+    // is out of range, which the render logic below checks for via `!fact`).
     const fact = facts[index];
+    // Used to disable/grey out the "back" pager arrow on the first card.
     const isFirst = index === 0;
+    // Used to disable/grey out the "forward" pager arrow on the last card.
     const isLast = index === facts.length - 1;
 
     return (
+        // transparent + fade: this Modal is meant to look like a card
+        // floating over a dimmed backdrop rather than a full opaque screen
+        // transition.
         <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+            {/* ModalBackdrop renders the dimmed background and calls
+                onClose when tapped anywhere outside the card. */}
             <ModalBackdrop style={styles.overlay} onPress={onClose}>
+                {/* Stopping propagation here means tapping inside the card
+                    itself does NOT bubble up to the backdrop's onPress, so
+                    the modal only closes on an actual outside tap. */}
                 <Pressable style={styles.card} onPress={(e) => e.stopPropagation()}>
                     <Text style={styles.kicker}>🏛️ PRESIDENTS IN OKLAHOMA</Text>
 
+                    {/* Four mutually exclusive states, checked in priority
+                        order: still loading, then a load error, then "no
+                        facts at all," and finally the normal card content.
+                        Only one of these four branches ever renders at a
+                        time. */}
                     {loading ? (
                         <View style={styles.centered}>
                             <ActivityIndicator size="small" color="#4E3629" />
@@ -68,6 +134,9 @@ export default function PresidentFactsModal({ visible, onClose }: { visible: boo
                     ) : (
                         <>
                             <View style={styles.divider} />
+                            {/* year and funDetail are optional fields on a
+                                fact -- both are conditionally rendered only
+                                when present. */}
                             {fact.year ? <Text style={styles.year}>{fact.year}</Text> : null}
                             <Text style={styles.title}>{fact.title}</Text>
                             <Text style={styles.body}>{fact.body}</Text>
@@ -78,6 +147,12 @@ export default function PresidentFactsModal({ visible, onClose }: { visible: boo
                                 </View>
                             ) : null}
 
+                            {/* Pager row: back arrow, "N / total" counter,
+                                forward arrow. Each arrow clamps the index
+                                with Math.max/Math.min so repeatedly tapping
+                                at either end can't push `index` out of
+                                bounds (redundant with the `disabled` prop,
+                                but a safe belt-and-suspenders guard). */}
                             <View style={styles.pagerRow}>
                                 <Pressable
                                     style={[styles.pagerButton, isFirst && styles.pagerButtonDisabled]}
@@ -107,6 +182,9 @@ export default function PresidentFactsModal({ visible, onClose }: { visible: boo
     );
 }
 
+// Static (non-theme-dependent) styles for the parchment-look card: overlay
+// centering, the card shell/shadow, typography for the kicker/title/body,
+// the "fun fact" callout box, and the pager row/buttons/counter.
 const styles = StyleSheet.create({
     overlay: { justifyContent: 'center', alignItems: 'center', padding: 24 },
     card: {

@@ -10,7 +10,6 @@ import { Image } from 'expo-image';
 import { useEffect, useMemo, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Modal,
     Pressable,
     ScrollView,
@@ -22,31 +21,17 @@ import {
     useColorScheme,
     View,
 } from 'react-native';
-import { colors, getTrailStyles } from '../commonStyles';
+import { colors, DIFFICULTY_COLORS, getTrailStyles } from '../commonStyles';
 import ModalBackdrop from '../components/ModalBackdrop';
 import RoutePreviewMap from '../components/RoutePreviewMap';
 import WebContainer from '../components/WebContainer';
 import { fetchTrailDetails, fetchTrailList, formatMiles, type TrailSummary as Trail } from '../lib/trails';
+import { showAlert } from '../lib/confirmAlert';
 
-
-// Color mapping used for the difficulty badge in the card list and modal.
-// `Record<Trail['difficulty'], string>` is a TypeScript utility type
-// meaning "an object whose keys are exactly every possible value of
-// Trail's difficulty field, and whose values are strings." This means
-// TypeScript will actually error if a difficulty level is ever added to
-// the Trail type but forgotten here — a nice safety net. Colors run from
-// green (easiest) through yellow/orange to deep red (hardest), a common
-// traffic-light-style difficulty scale.
-const DIFFICULTY_COLORS: Record<Trail['difficulty'], string> = {
-    'Easiest': '#4CAF50',
-    'Easy': '#8BC34A',
-    'Easy-Moderate': '#CDDC39',
-    'Moderate': '#FFC107',
-    'Moderate-Difficult': '#FF9800',
-    'Difficult': '#FF5722',
-    'Very Difficult': '#E53935',
-    'Most Difficult': '#B71C1C',
-};
+// DIFFICULTY_COLORS now imported from commonStyles.ts (the shared design-
+// system source of truth) rather than duplicated here — this file used to
+// redeclare its own identical copy, which meant an AA-contrast fix to one
+// copy could silently drift from the other. Found by an /impeccable audit.
 
 // Small card used in the scrollable trail catalog.
 // This is a separate, smaller component (rather than inline JSX in the
@@ -231,6 +216,7 @@ function TrailModal({ trail, routeGeojson, routePreviewLoading, onClose, scheme,
                                     accentColor={colors[scheme].secondary}
                                     subtextColor={colors[scheme].subtext}
                                     borderColor={colors[scheme].border}
+                                    theme={colors[scheme]}
                                 />
                             )}
                         </View>
@@ -280,7 +266,7 @@ export default function TrailsScreen() {
                 console.error('Failed to load trails:', error);
 
                 if (isMounted) {
-                    Alert.alert(
+                    showAlert(
                         'Error',
                         'Unable to load trails right now.'
                     );

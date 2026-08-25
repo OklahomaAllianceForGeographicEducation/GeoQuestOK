@@ -11,7 +11,6 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Modal,
     Platform,
     Pressable,
@@ -24,6 +23,7 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { colors, DIFFICULTY_COLORS, getDashboardStyles } from '../../commonStyles';
+import { showAlert } from '../../lib/confirmAlert';
 import { useBadgeUnlocks } from '../../components/BadgeUnlockProvider';
 import MileageLogModal from '../../components/MileageLogModal';
 import ModalBackdrop from '../../components/ModalBackdrop';
@@ -305,192 +305,6 @@ function AllLandmarksModal({ landmarks, milesWalked, onSelectLandmark, onClose, 
         </Modal>
     );
 }
-
-// A custom keypad-based miles-logging modal, styled with a "vintage
-// parchment" look (matching the passport screen's aesthetic) distinct from
-// the rest of the dashboard's plainer UI. NOTE: there's also a separate
-// MileageLogModal component imported at the top of this file and actually
-// used in the main render below — this LogMilesModal function is defined
-// here but never actually referenced/rendered anywhere in the component,
-// making it unused/dead code (likely an earlier version of the mileage
-// logging UI that was replaced by the imported MileageLogModal component).
-function LogMilesModal({ onLog, onClose, dStyles, theme }: any) {
-    // The number currently being typed on the custom keypad, kept as a
-    // string so it can represent partial input like "12." before the
-    // decimal digits are typed.
-    const [custom, setCustom] = useState('');
-    const [isSaving, setIsSaving] = useState(false);
-
-    // Handles a tap on any keypad key (digit, decimal point, or delete).
-    const handleKeyPress = (val: string) => {
-        // Prevent multiple decimals
-        // Blocks typing a second "." if one is already present.
-        if (val === '.' && custom.includes('.')) return;
-        // Limit to reasonable characters for mileage (e.g., max 5 digits before/after)
-        // Caps the total input length at 6 characters (unless the key
-        // pressed is 'delete', which should always be allowed through).
-        if (custom.length >= 6 && val !== 'delete') return;
-
-        if (val === 'delete') {
-            // Remove the last character (backspace behavior).
-            setCustom(prev => prev.slice(0, -1));
-        } else {
-            setCustom(prev => prev + val);
-        }
-    };
-
-    // Handles one of the "+1 mi" / "+3 mi" / "+5 mi" quick-log buttons.
-    const handleQuickLog = async (amt: number) => {
-        if (isSaving) return;
-        setIsSaving(true);
-        await onLog(amt);
-        setIsSaving(false);
-    };
-
-    return (
-        <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-            <ModalBackdrop style={dStyles.modalOverlay}>
-                <View style={[customModalStyles.logModalSheet, { paddingBottom: 24 }]}>
-                    <Pressable style={[customModalStyles.modernCloseBtn, { backgroundColor: theme?.accent || '#FF5722' }]} onPress={onClose} accessibilityRole="button" accessibilityLabel="Close">
-                        <Text style={customModalStyles.modernCloseBtnText}>Close</Text>
-                    </Pressable>
-
-                    <Text style={customModalStyles.logModalTitle} numberOfLines={1}>
-                        Log Your Progress
-                    </Text>
-
-                    {/* Display box replacing the native TextInput */}
-                    {/* Rather than a real editable TextInput, this is just
-                        a plain Text display showing whatever the custom
-                        on-screen keypad has built up — all input comes
-                        from tapping the keypad keys below, not the device
-                        keyboard. */}
-                    <View style={customModalStyles.compactInputField}>
-                        <Text style={{
-                            fontSize: 18,
-                            fontWeight: '600',
-                            // The displayed number is a dark brown when
-                            // there's actual input, or a muted gray
-                            // placeholder color when empty.
-                            color: custom ? '#4E3629' : '#8E8E93',
-                            textAlign: 'center',
-                            lineHeight: 44
-                        }}>
-                            {custom || "0.00 miles"}
-                        </Text>
-                    </View>
-
-                    {/* Quick action buttons */}
-                    <View style={[customModalStyles.quickActionRow, { marginBottom: 16 }]}>
-                        <Pressable style={customModalStyles.quickActionPill} onPress={() => handleQuickLog(1)} accessibilityRole="button">
-                            <Text style={customModalStyles.quickActionPillText}>+1 mi</Text>
-                        </Pressable>
-                        <Pressable style={customModalStyles.quickActionPill} onPress={() => handleQuickLog(3)} accessibilityRole="button">
-                            <Text style={customModalStyles.quickActionPillText}>+3 mi</Text>
-                        </Pressable>
-                        <Pressable style={customModalStyles.quickActionPill} onPress={() => handleQuickLog(5)} accessibilityRole="button">
-                            <Text style={customModalStyles.quickActionPillText}>+5 mi</Text>
-                        </Pressable>
-                    </View>
-
-                    {/* Custom Integrated Keypad Grid */}
-                    {/* A hand-built numeric keypad — 4 rows of 3 keys each
-                        (1-9, then ".", "0", and a backspace symbol "⌫"),
-                        rendered by mapping over a small array-of-arrays
-                        layout definition. */}
-                    <View style={padStyles.grid}>
-                        {[
-                            ['1', '2', '3'],
-                            ['4', '5', '6'],
-                            ['7', '8', '9'],
-                            ['.', '0', '⌫']
-                        ].map((row, rIdx) => (
-                            <View key={rIdx} style={padStyles.row}>
-                                {row.map((key) => (
-                                    <Pressable
-                                        key={key}
-                                        style={({ pressed }) => [
-                                            padStyles.key,
-                                            pressed && padStyles.keyPressed
-                                        ]}
-                                        // The backspace symbol maps to the
-                                        // string 'delete' internally, while
-                                        // every other key just passes its
-                                        // own character straight through.
-                                        onPress={() => handleKeyPress(key === '⌫' ? 'delete' : key)}
-                                        accessibilityRole="button"
-                                        accessibilityLabel={key === '⌫' ? 'Backspace' : key === '.' ? 'Decimal point' : key}
-                                    >
-                                        <Text style={padStyles.keyText}>{key}</Text>
-                                    </Pressable>
-                                ))}
-                            </View>
-                        ))}
-                    </View>
-
-                    {/* Submit Log Button */}
-                    <Pressable
-                        style={[dStyles.customLogButton, { marginTop: 16, height: 46, borderRadius: 8, justifyContent: 'center', alignItems: 'center', width: '100%', maxWidth: 280, alignSelf: 'center' }]}
-                        // Disabled while saving, while the field is empty,
-                        // or if the parsed value is exactly 0 — prevents
-                        // logging a meaningless zero-mile entry.
-                        disabled={isSaving || !custom || parseFloat(custom) === 0}
-                        onPress={async () => {
-                            const val = parseFloat(custom);
-                            if (!isNaN(val) && val > 0) {
-                                setIsSaving(true);
-                                await onLog(val);
-                                setIsSaving(false);
-                            }
-                        }}
-                        accessibilityRole="button"
-                    >
-                        <Text style={[dStyles.customLogButtonText, { textAlign: 'center', width: '100%' }]}>
-                            {isSaving ? "Saving..." : "Log Miles"}
-                        </Text>
-                    </Pressable>
-                </View>
-            </ModalBackdrop>
-        </Modal>
-    );
-}
-
-// Add these styles right below your customModalStyles object
-// Styles specifically for the custom numeric keypad grid used by the
-// (currently unused) LogMilesModal above.
-const padStyles = StyleSheet.create({
-    grid: {
-        width: '100%',
-        maxWidth: 280,
-        gap: 8,
-        alignSelf: 'center',
-    },
-    row: {
-        flexDirection: 'row',
-        gap: 8,
-    },
-    key: {
-        // flex: 1 makes all 3 keys in a row share equal width.
-        flex: 1,
-        height: 44,
-        backgroundColor: '#F4F1EA',
-        borderWidth: 1,
-        borderColor: '#C8C4B7',
-        borderRadius: 8,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    keyPressed: {
-        // A slightly darker beige tint while a key is actively being
-        // pressed, giving tactile visual feedback.
-        backgroundColor: '#E5E1D4',
-    },
-    keyText: {
-        fontSize: 18,
-        fontWeight: '600',
-        color: '#4E3629',
-    }
-});
 
 // Shown when the student either finishes their current trail (walks its
 // full length) or has no trail selected yet — presents a list of
@@ -1079,7 +893,7 @@ export default function DashboardScreen() {
             const newMiles = milesWalked + milesToLog;
 
             if (!trailId) {
-                Alert.alert('No Active Trail', 'Please choose a trail before logging miles.');
+                showAlert('No Active Trail', 'Please choose a trail before logging miles.');
                 return;
             }
 

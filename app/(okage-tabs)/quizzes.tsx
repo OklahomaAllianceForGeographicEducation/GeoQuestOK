@@ -3,7 +3,7 @@
 // multiple-choice questions tied to it. Every field is a dropdown chip or a
 // text box — no JSON, no raw ids to type by hand.
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type SetStateAction } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -20,6 +20,7 @@ import {
 import { colors, Theme } from '../../commonStyles';
 import StandardPickerModal from '../../components/StandardPickerModal';
 import TourTarget from '../../components/tour/TourTarget';
+import { confirmAlert } from '../../lib/confirmAlert';
 import { LESSON_SUBJECTS } from '../../lib/curriculum';
 
 // geojsonPointsToLandmarks converts a trail's raw GeoJSON "point" features
@@ -109,6 +110,20 @@ export default function OkageQuizzesScreen() {
     const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
     const [form, setForm] = useState({ ...EMPTY_FORM });
     const [saving, setSaving] = useState(false);
+    // Tracks whether the open add/edit form has any in-progress edit that
+    // hasn't been saved yet — set true by every field edit below (via
+    // `setFormDirty`), and reset to false whenever the form is freshly
+    // opened or a save completes. Used to guard the trail-filter-chip
+    // switch, which otherwise silently closes (and discards) an open form.
+    const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+    // Thin wrapper around setForm that also flags the form as dirty — used
+    // ONLY at genuine user-edit call sites, not when the form is freshly
+    // opened/reset.
+    function setFormDirty(updater: SetStateAction<typeof EMPTY_FORM>) {
+        setHasUnsavedChanges(true);
+        setForm(updater);
+    }
 
     useEffect(() => {
         async function bootstrap() {
@@ -193,11 +208,28 @@ export default function OkageQuizzesScreen() {
         return groups;
     }, [questions]);
 
+    // Switches the trail-filter chip. The effect above closes (and
+    // discards) any open add/edit question form as soon as
+    // `selectedTrailId` changes, so — same as content.tsx's trail switch —
+    // confirm first if that form actually has unsaved edits.
+    function selectTrail(trailId: string) {
+        if (trailId === selectedTrailId) return;
+        if (formOpen && hasUnsavedChanges) {
+            confirmAlert('Unsaved Changes', 'You have unsaved changes. Discard them?', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Discard', style: 'destructive', onPress: () => setSelectedTrailId(trailId) },
+            ]);
+            return;
+        }
+        setSelectedTrailId(trailId);
+    }
+
     // Resets and opens the form in "create new question" mode, pre-
     // selecting the first available landmark as a sensible default.
     function openAddForm() {
         setEditingQuestionId(null);
         setForm({ ...EMPTY_FORM, landmarkId: landmarks[0]?.id ?? '', landmarkTitle: landmarks[0]?.title ?? '' });
+        setHasUnsavedChanges(false);
         setFormOpen(true);
     }
 
@@ -221,6 +253,7 @@ export default function OkageQuizzesScreen() {
             wrongAnswer2: question.wrongAnswers[1] ?? '',
             wrongAnswer3: question.wrongAnswers[2] ?? '',
         });
+        setHasUnsavedChanges(false);
         setFormOpen(true);
     }
 
@@ -273,6 +306,7 @@ export default function OkageQuizzesScreen() {
             // immediately.
             const refreshed = await fetchAllQuizQuestionsForTrail(selectedTrailId);
             setQuestions(refreshed);
+            setHasUnsavedChanges(false);
             setFormOpen(false);
         } catch (err: any) {
             showAlert('Save Failed', err.message || 'Could not save this question.');
@@ -324,7 +358,7 @@ export default function OkageQuizzesScreen() {
                         const chip = (
                             <Pressable
                                 style={[styles.chip, { borderColor: theme.border, backgroundColor: active ? theme.accent : theme.surface }]}
-                                onPress={() => setSelectedTrailId(trail.id)}
+                                onPress={() => selectTrail(trail.id)}
                                 accessibilityRole="radio"
                                 accessibilityState={{ checked: active }}
                             >
@@ -380,7 +414,7 @@ export default function OkageQuizzesScreen() {
                                             <Pressable
                                                 key={l.id}
                                                 style={[styles.chipSmall, { borderColor: theme.border, backgroundColor: active ? theme.accent : theme.background }]}
-                                                onPress={() => setForm((prev) => ({ ...prev, landmarkId: l.id, landmarkTitle: l.title }))}
+                                                onPress={() => setFormDirty((prev) => ({ ...prev, landmarkId: l.id, landmarkTitle: l.title }))}
                                                 accessibilityRole="radio"
                                                 accessibilityState={{ checked: active }}
                                             >
@@ -398,7 +432,7 @@ export default function OkageQuizzesScreen() {
                                             <Pressable
                                                 key={band.value}
                                                 style={[styles.chipSmall, { borderColor: theme.border, backgroundColor: active ? theme.accent : theme.background }]}
-                                                onPress={() => setForm((prev) => ({ ...prev, gradeBand: band.value }))}
+                                                onPress={() => setFormDirty((prev) => ({ ...prev, gradeBand: band.value }))}
                                                 accessibilityRole="radio"
                                                 accessibilityState={{ checked: active }}
                                             >
@@ -416,7 +450,7 @@ export default function OkageQuizzesScreen() {
                                             <Pressable
                                                 key={subject.value}
                                                 style={[styles.chipSmall, { borderColor: theme.border, backgroundColor: active ? theme.accent : theme.background }]}
-                                                onPress={() => setForm((prev) => ({ ...prev, subject: subject.value }))}
+                                                onPress={() => setFormDirty((prev) => ({ ...prev, subject: subject.value }))}
                                                 accessibilityRole="radio"
                                                 accessibilityState={{ checked: active }}
                                             >
@@ -437,7 +471,7 @@ export default function OkageQuizzesScreen() {
                                     <TextInput
                                         style={[styles.textInput, { flex: 1, backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
                                         value={form.standardCode}
-                                        onChangeText={(text) => setForm((prev) => ({ ...prev, standardCode: text }))}
+                                        onChangeText={(text) => setFormDirty((prev) => ({ ...prev, standardCode: text }))}
                                         placeholder="e.g. 3.RL.2"
                                         placeholderTextColor={theme.subtext}
                                         autoCapitalize="characters"
@@ -456,7 +490,7 @@ export default function OkageQuizzesScreen() {
                                 <TextInput
                                     style={[styles.textArea, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
                                     value={form.question}
-                                    onChangeText={(text) => setForm((prev) => ({ ...prev, question: text }))}
+                                    onChangeText={(text) => setFormDirty((prev) => ({ ...prev, question: text }))}
                                     placeholder="What question should students answer here?"
                                     placeholderTextColor={theme.subtext}
                                     multiline
@@ -467,7 +501,7 @@ export default function OkageQuizzesScreen() {
                                 <TextInput
                                     style={[styles.textInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
                                     value={form.correctAnswer}
-                                    onChangeText={(text) => setForm((prev) => ({ ...prev, correctAnswer: text }))}
+                                    onChangeText={(text) => setFormDirty((prev) => ({ ...prev, correctAnswer: text }))}
                                     placeholder="The right answer"
                                     placeholderTextColor={theme.subtext}
                                 />
@@ -476,21 +510,21 @@ export default function OkageQuizzesScreen() {
                                 <TextInput
                                     style={[styles.textInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text, marginBottom: 8 }]}
                                     value={form.wrongAnswer1}
-                                    onChangeText={(text) => setForm((prev) => ({ ...prev, wrongAnswer1: text }))}
+                                    onChangeText={(text) => setFormDirty((prev) => ({ ...prev, wrongAnswer1: text }))}
                                     placeholder="Wrong choice 1"
                                     placeholderTextColor={theme.subtext}
                                 />
                                 <TextInput
                                     style={[styles.textInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text, marginBottom: 8 }]}
                                     value={form.wrongAnswer2}
-                                    onChangeText={(text) => setForm((prev) => ({ ...prev, wrongAnswer2: text }))}
+                                    onChangeText={(text) => setFormDirty((prev) => ({ ...prev, wrongAnswer2: text }))}
                                     placeholder="Wrong choice 2 (optional)"
                                     placeholderTextColor={theme.subtext}
                                 />
                                 <TextInput
                                     style={[styles.textInput, { backgroundColor: theme.background, borderColor: theme.border, color: theme.text }]}
                                     value={form.wrongAnswer3}
-                                    onChangeText={(text) => setForm((prev) => ({ ...prev, wrongAnswer3: text }))}
+                                    onChangeText={(text) => setFormDirty((prev) => ({ ...prev, wrongAnswer3: text }))}
                                     placeholder="Wrong choice 3 (optional)"
                                     placeholderTextColor={theme.subtext}
                                 />
@@ -599,9 +633,10 @@ export default function OkageQuizzesScreen() {
             <StandardPickerModal
                 visible={standardPickerOpen}
                 onClose={() => setStandardPickerOpen(false)}
+                theme={theme}
                 accentColor={theme.accent}
                 initialSubject={LESSON_SUBJECT_TO_STANDARDS_SUBJECT[form.subject]}
-                onSelect={(standard) => setForm((prev) => ({ ...prev, standardCode: standard.code }))}
+                onSelect={(standard) => setFormDirty((prev) => ({ ...prev, standardCode: standard.code }))}
             />
         </KeyboardAvoidingView>
     );
@@ -638,9 +673,9 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     fieldLabel: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6, marginBottom: 6, marginTop: 10 },
     textInput: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
     standardRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    browseButton: { borderWidth: 1.5, borderRadius: 10, padding: 10 },
+    browseButton: { borderWidth: 1.5, borderRadius: 10, padding: 14 },
     textArea: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, minHeight: 60, textAlignVertical: 'top' },
-    saveButton: { marginTop: 16, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+    saveButton: { marginTop: 16, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
     saveButtonText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
 
     landmarkHeading: { fontSize: 16, fontWeight: '800', fontFamily: 'Georgia', marginBottom: 8 },
@@ -659,5 +694,5 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     },
     questionMeta: { fontSize: 10, fontWeight: '800', letterSpacing: 0.6, marginBottom: 4, textTransform: 'uppercase' },
     questionText: { fontSize: 14, fontWeight: '600', lineHeight: 19 },
-    iconButton: { borderWidth: 1, borderRadius: 10, padding: 8 },
+    iconButton: { borderWidth: 1, borderRadius: 10, padding: 14 },
 });

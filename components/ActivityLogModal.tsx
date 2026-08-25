@@ -1,8 +1,40 @@
+// components/ActivityLogModal.tsx
+//
+// A popup (React Native `Modal`) used to let a student log a physical
+// activity (walking, running, biking, etc.) and convert it into miles for
+// their trail progress. It is opened by a parent screen (e.g. the
+// dashboard/fitness tab) which controls its `visible` prop and supplies an
+// `onSubmit` callback to actually persist the logged activity (typically a
+// Supabase write) once the student taps "Log Activity".
+//
+// Shape of the UI: a rounded "sheet" card centered over a dimmed backdrop,
+// containing:
+//   - a row of activity type pills (walking/running/biking/etc, from
+//     lib/activityTypes.ts's ACTIVITY_OPTIONS),
+//   - an optional row of unit toggles (e.g. steps vs. minutes) when an
+//     activity supports more than one input unit,
+//   - a numeric entry area for the amount (a real text field on web, a
+//     hand-built tap keypad on native -- see the `isWeb` split below),
+//   - a live preview of how many miles that amount converts to,
+//   - a row of "quick amount" pills for common values, and
+//   - a submit button that calls `onSubmit` with the computed result.
+//
+// This component is one of three near-identical sibling "numeric entry"
+// modals in this folder (see MileageLogModal.tsx and
+// NumericEntryModal.tsx) -- they share the same overall sheet layout and
+// web/native input-method split, but this one is specialized for
+// activity-type + unit selection with mile conversion built in.
+
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, useColorScheme, useWindowDimensions, View } from 'react-native';
+import { colors, Theme } from '../commonStyles';
 import { ACTIVITY_OPTIONS, ActivityKey, getActivityConfig, getUnitConfig, InputUnit, milesForActivity } from '../lib/activityTypes';
 
+// The final value handed to `onSubmit` once the student taps "Log
+// Activity": which activity they picked, the raw amount they entered, the
+// unit that amount is in, and the amount already converted to miles (so the
+// caller doesn't have to redo that conversion itself).
 type ActivityLogResult = {
     activityType: ActivityKey;
     amount: number;
@@ -10,6 +42,22 @@ type ActivityLogResult = {
     miles: number;
 };
 
+// Props for ActivityLogModal:
+// - visible: whether the Modal is shown. Controlled entirely by the parent
+//   screen -- this component has no internal open/close state of its own.
+// - onClose: called whenever the modal should be dismissed (tapping the
+//   Close button). Parent is expected to flip `visible` back to false.
+// - onSubmit: called with the finished ActivityLogResult once the student
+//   submits a valid (> 0) amount. May return a Promise -- the modal shows a
+//   "Saving..." state and disables the submit button while it resolves.
+// - accentColor: optional highlight color used for selected pills, the
+//   Close button, and the submit button, so the caller can theme this modal
+//   per screen (e.g. a different accent for different trail themes).
+//   Defaults to a fixed orange.
+// - title: optional heading text shown at the top of the sheet. Defaults to
+//   "Log Activity".
+// - initialActivity: which activity type is pre-selected when the modal
+//   opens. Defaults to 'walking'.
 type ActivityLogModalProps = {
     visible: boolean;
     onClose: () => void;
@@ -25,6 +73,8 @@ type ActivityLogModalProps = {
 // iOS/Android; only the web experience changes.
 const isWeb = Platform.OS === 'web';
 
+// Rows of keys for the native-only hand-built numeric keypad (see the
+// `!isWeb` branch in the JSX below). '⌫' is rendered as a backspace key.
 const keypadRows = [
     ['1', '2', '3'],
     ['4', '5', '6'],
@@ -32,12 +82,15 @@ const keypadRows = [
     ['.', '0', '⌫'],
 ];
 
+// Human-readable labels for each InputUnit, used on the unit-toggle pills.
 const UNIT_LABELS: Record<InputUnit, string> = {
     steps: 'Steps',
     minutes: 'Minutes',
     miles: 'Miles',
 };
 
+// Shorter unit label used next to the quick-amount pills (e.g. "500 steps"
+// vs. "500 min") where space is tighter than the full toggle labels above.
 function shortUnitLabel(unit: InputUnit): string {
     if (unit === 'steps') return 'steps';
     if (unit === 'miles') return 'mi';
@@ -54,6 +107,13 @@ function sanitizeNumericText(text: string): string {
     return rest.length > 0 ? `${whole}.${rest.join('')}` : whole;
 }
 
+// ActivityLogModal
+// The exported component itself. Renders a Modal (see props doc above for
+// what each prop controls) that lets a student pick an activity type, a
+// unit, and an amount, previews the mile conversion live, and calls
+// `onSubmit` with the finished result.
+// Returns: a React Native <Modal> containing the sheet UI described in the
+// file-level comment above.
 export default function ActivityLogModal({
     visible,
     onClose,
@@ -62,10 +122,34 @@ export default function ActivityLogModal({
     title = 'Log Activity',
     initialActivity = 'walking',
 }: ActivityLogModalProps) {
+    // useColorScheme() reports the OS/app light-or-dark preference;
+    // `?? 'light'` covers the brief moment it can be null/undefined before
+    // that preference is known, so `colors[scheme]` is always a valid
+    // lookup. `getStyles(theme)` (defined below) builds a fresh
+    // theme-colored StyleSheet for whichever scheme is active.
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
+    const styles = getStyles(theme);
+
+    // -- React state --
+    // activityType: which activity pill is currently selected (walking,
+    // running, biking, etc). Drives which units/quick-amounts are shown.
     const [activityType, setActivityType] = useState<ActivityKey>(initialActivity);
+    // selectedUnit: which input unit (steps/minutes/miles) the amount below
+    // is currently measured in. Initialized to the activity's first
+    // supported unit.
     const [selectedUnit, setSelectedUnit] = useState<InputUnit>(getActivityConfig(initialActivity).units[0].unit);
+    // custom: the raw amount typed/tapped in so far, kept as a STRING (not
+    // a number) so a field can be legitimately empty, or mid-way through
+    // typing a decimal like "12." without losing the trailing dot.
     const [custom, setCustom] = useState('');
+    // isSaving: true while the async onSubmit() call (below) is in flight.
+    // Disables the submit button and swaps its label to "Saving..." so a
+    // student can't double-submit by tapping twice.
     const [isSaving, setIsSaving] = useState(false);
+    // inputRef: a handle to the web-only <TextInput> so it can be
+    // imperatively focused (see the effects/handlers below) without going
+    // through state.
     const inputRef = useRef<TextInput>(null);
     const { height: windowHeight } = useWindowDimensions();
     // A percentage maxHeight on the sheet doesn't reliably resolve on web
@@ -83,26 +167,57 @@ export default function ActivityLogModal({
     // was visible). A plain maxHeight has no such ambiguity.
     const scrollMaxHeight = sheetMaxHeight - 48;
 
+    // Derived (recomputed every render, not stored in state) values used
+    // throughout the JSX below:
+    // - config: the full ActivityKey config (units, quick amounts, icon,
+    //   etc.) for whichever activity is currently selected.
+    // - unitConfig: the config specifically for the currently selected unit
+    //   (e.g. its quick-amount presets).
+    // - amount: `custom` parsed to a number, defaulting to 0 if it isn't a
+    //   valid number yet (e.g. empty string, or just "-").
+    // - previewMiles: `amount` converted to miles using this activity/unit
+    //   combo's conversion rule, shown live under the input field.
     const config = getActivityConfig(activityType);
     const unitConfig = getUnitConfig(activityType, selectedUnit);
     const amount = parseFloat(custom) || 0;
     const previewMiles = milesForActivity(activityType, selectedUnit, amount);
 
+    // Resets the modal's inner state whenever it opens or closes, and
+    // (web only) focuses the text input shortly after opening.
+    // Dependency array [visible, initialActivity]: re-runs whenever the
+    // modal is toggled open/closed, or whenever the parent changes which
+    // activity should be pre-selected (e.g. opening this modal from a
+    // different "log activity" entry point).
     useEffect(() => {
         if (visible) {
+            // Re-sync to the initial activity/unit and clear any leftover
+            // amount from a previous time this modal was opened.
             setActivityType(initialActivity);
             setSelectedUnit(getActivityConfig(initialActivity).units[0].unit);
             setCustom('');
             if (isWeb) {
+                // setTimeout(..., 0) defers the focus() call to just after
+                // this render commits and the <TextInput> actually exists
+                // in the DOM -- calling focus() synchronously here could
+                // target a node that isn't mounted yet.
                 const focusDelay = setTimeout(() => inputRef.current?.focus(), 0);
+                // Cleanup cancels the pending focus if the effect re-runs
+                // (or the component unmounts) before the timeout fires.
                 return () => clearTimeout(focusDelay);
             }
         } else {
+            // Modal just closed: clear the amount and any stuck saving
+            // state so the next time it opens it starts fresh.
             setCustom('');
             setIsSaving(false);
         }
     }, [visible, initialActivity]);
 
+    // Fired when the student taps a different activity pill. Switches the
+    // selected activity, resets the unit to that activity's first
+    // supported unit (since the previous unit might not apply to the new
+    // activity), and clears whatever amount had been entered so it isn't
+    // misread against the new activity/unit.
     const handleActivityChange = (key: ActivityKey) => {
         setActivityType(key);
         setSelectedUnit(getActivityConfig(key).units[0].unit);
@@ -110,12 +225,23 @@ export default function ActivityLogModal({
         if (isWeb) inputRef.current?.focus();
     };
 
+    // Fired when the student taps a different unit toggle (e.g. switching
+    // from "steps" to "minutes" for the same activity). Clears the amount
+    // since a number typed for one unit rarely makes sense in another.
     const handleUnitChange = (unit: InputUnit) => {
         setSelectedUnit(unit);
         setCustom('');
         if (isWeb) inputRef.current?.focus();
     };
 
+    // Native-only hand-built keypad handler: appends/removes a character
+    // from `custom` in response to a tap on one of the keypadRows keys.
+    // - Ignores a second '.' if one is already present (a numeric value can
+    //   only have one decimal point).
+    // - Caps the field at 6 characters (ignoring backspace) so the amount
+    //   can't grow unreasonably long.
+    // - 'delete' (mapped from the '⌫' key below) removes the last
+    //   character instead of appending.
     const handleKeyPress = (val: string) => {
         if (val === '.' && custom.includes('.')) return;
         if (custom.length >= 6 && val !== 'delete') return;
@@ -134,6 +260,13 @@ export default function ActivityLogModal({
         setCustom(String(amt));
     };
 
+    // Fired when the student taps "Log Activity" (or submits the web text
+    // field). Guards against double-submits (isSaving) and against
+    // submitting a non-positive amount. Sets isSaving true so the button
+    // shows "Saving..." and is disabled while `onSubmit` (supplied by the
+    // parent, typically a Supabase write) is in flight, then closes the
+    // modal on success. The `finally` ensures isSaving is reset even if
+    // onSubmit throws, so the button doesn't stay stuck disabled.
     const handleSubmit = async () => {
         if (isSaving || amount <= 0) return;
         setIsSaving(true);
@@ -151,10 +284,23 @@ export default function ActivityLogModal({
     };
 
     return (
+        // Modal is React Native's built-in component for rendering content
+        // above everything else in the view hierarchy (similar to a portal
+        // on web) -- it takes over the screen until dismissed.
+        // `animationType="slide"` slides the content up from the bottom;
+        // `transparent` lets the custom dimmed `overlay` View below show
+        // through instead of an opaque native background;
+        // `onRequestClose` is required on Android (it's what the hardware
+        // back button triggers).
         <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
             <View style={styles.overlay}>
                 <View style={[styles.sheet, { maxHeight: sheetMaxHeight }]}>
-                    <Pressable style={[styles.closeButton, { backgroundColor: accentColor }]} onPress={onClose}>
+                    <Pressable
+                        style={[styles.closeButton, { backgroundColor: accentColor }]}
+                        onPress={onClose}
+                        accessibilityRole="button"
+                        accessibilityLabel="Close"
+                    >
                         <Text style={styles.closeButtonText}>Close</Text>
                     </Pressable>
 
@@ -185,14 +331,23 @@ export default function ActivityLogModal({
                                         key={opt.key}
                                         style={[styles.activityPill, selected && { backgroundColor: accentColor, borderColor: accentColor }]}
                                         onPress={() => handleActivityChange(opt.key)}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={opt.label}
+                                        accessibilityState={{ selected }}
                                     >
-                                        <Ionicons name={opt.icon as any} size={16} color={selected ? '#FFF' : '#4E3629'} />
+                                        <Ionicons name={opt.icon as any} size={16} color={selected ? '#FFF' : theme.text} />
                                         <Text style={[styles.activityPillText, selected && { color: '#FFF' }]}>{opt.label}</Text>
                                     </Pressable>
                                 );
                             })}
                         </View>
 
+                        {/* Unit toggle row only renders when the currently
+                            selected activity supports more than one input
+                            unit (e.g. walking might support both "steps"
+                            and "minutes") -- activities with a single fixed
+                            unit skip this row entirely rather than showing
+                            a pointless single-option toggle. */}
                         {config.units.length > 1 && (
                             <View style={styles.unitToggleRow}>
                                 {config.units.map((u) => {
@@ -202,6 +357,9 @@ export default function ActivityLogModal({
                                             key={u.unit}
                                             style={[styles.unitToggle, selected && { backgroundColor: accentColor, borderColor: accentColor }]}
                                             onPress={() => handleUnitChange(u.unit)}
+                                            accessibilityRole="button"
+                                            accessibilityLabel={UNIT_LABELS[u.unit]}
+                                            accessibilityState={{ selected }}
                                         >
                                             <Text style={[styles.unitToggleText, selected && { color: '#FFF' }]}>{UNIT_LABELS[u.unit]}</Text>
                                         </Pressable>
@@ -223,7 +381,7 @@ export default function ActivityLogModal({
                                     value={custom}
                                     onChangeText={(text) => setCustom(sanitizeNumericText(text))}
                                     placeholder={`0 ${selectedUnit}`}
-                                    placeholderTextColor="#8E8E93"
+                                    placeholderTextColor={theme.subtext}
                                     keyboardType="decimal-pad"
                                     returnKeyType="done"
                                     selectTextOnFocus
@@ -234,8 +392,11 @@ export default function ActivityLogModal({
                                 </Text>
                             </>
                         ) : (
+                            // Native: a read-only-looking display of `custom`
+                            // (or a placeholder when empty), driven entirely
+                            // by the tap keypad rendered further down.
                             <View style={styles.inputField}>
-                                <Text style={{ fontSize: 18, fontWeight: '600', color: custom ? '#4E3629' : '#8E8E93', textAlign: 'center', lineHeight: 30 }}>
+                                <Text style={{ fontSize: 18, fontWeight: '600', color: custom ? theme.text : theme.subtext, textAlign: 'center', lineHeight: 30 }}>
                                     {custom || `0 ${selectedUnit}`}
                                 </Text>
                                 <Text style={styles.previewText}>
@@ -244,9 +405,19 @@ export default function ActivityLogModal({
                             </View>
                         )}
 
+                        {/* Quick-amount pills: common preset values for the
+                            currently selected unit (e.g. common step
+                            counts), sourced from unitConfig so they change
+                            automatically when the activity/unit changes. */}
                         <View style={styles.quickActionRow}>
                             {unitConfig.quickAmounts.map((amt) => (
-                                <Pressable key={amt} style={styles.quickActionPill} onPress={() => handleQuickAmount(amt)}>
+                                <Pressable
+                                    key={amt}
+                                    style={styles.quickActionPill}
+                                    onPress={() => handleQuickAmount(amt)}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`${amt.toLocaleString()} ${shortUnitLabel(selectedUnit)}`}
+                                >
                                     <Text style={styles.quickActionPillText}>
                                         {amt.toLocaleString()} {shortUnitLabel(selectedUnit)}
                                     </Text>
@@ -254,6 +425,11 @@ export default function ActivityLogModal({
                             ))}
                         </View>
 
+                        {/* Native-only hand-built numeric keypad -- hidden
+                            entirely on web, where the real <TextInput>
+                            above already brings up the OS/on-screen
+                            keyboard. Each key calls handleKeyPress with its
+                            digit/dot, or 'delete' for the backspace key. */}
                         {!isWeb && (
                             <View style={styles.grid}>
                                 {keypadRows.map((row, idx) => (
@@ -263,6 +439,8 @@ export default function ActivityLogModal({
                                                 key={key}
                                                 style={({ pressed }) => [styles.key, pressed && styles.keyPressed]}
                                                 onPress={() => handleKeyPress(key === '⌫' ? 'delete' : key)}
+                                                accessibilityRole="button"
+                                                accessibilityLabel={key === '⌫' ? 'Backspace' : key === '.' ? 'Decimal point' : key}
                                             >
                                                 <Text style={styles.keyText}>{key}</Text>
                                             </Pressable>
@@ -276,6 +454,8 @@ export default function ActivityLogModal({
                             style={[styles.submitButton, { backgroundColor: accentColor }]}
                             disabled={isSaving || amount <= 0}
                             onPress={() => void handleSubmit()}
+                            accessibilityRole="button"
+                            accessibilityLabel="Log Activity"
                         >
                             <Text style={styles.submitText}>{isSaving ? 'Saving...' : 'Log Activity'}</Text>
                         </Pressable>
@@ -286,7 +466,12 @@ export default function ActivityLogModal({
     );
 }
 
-const styles = StyleSheet.create({
+// Theme-aware style factory (see commonStyles.ts's Theme type) -- called
+// once per render inside the component so every fill/text/border color
+// tracks the active light/dark scheme instead of being frozen at hex
+// literals that only ever looked right in light mode.
+const getStyles = (theme: Theme) => StyleSheet.create({
+    // -- overlay/sheet container styles --
     overlay: {
         flex: 1,
         backgroundColor: 'rgba(44,30,23,0.5)',
@@ -295,10 +480,10 @@ const styles = StyleSheet.create({
         padding: 24,
     },
     sheet: {
-        backgroundColor: '#FAF9F5',
+        backgroundColor: theme.surface,
         borderRadius: 24,
         borderWidth: 1,
-        borderColor: '#C8C4B7',
+        borderColor: theme.border,
         paddingTop: 24,
         paddingBottom: 24,
         width: '100%',
@@ -306,7 +491,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         marginBottom: Platform.OS === 'ios' ? 34 : 20,
         overflow: 'hidden',
-        shadowColor: '#000',
+        shadowColor: theme.shadow,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.15,
         shadowRadius: 12,
@@ -319,11 +504,12 @@ const styles = StyleSheet.create({
         paddingHorizontal: 24,
         alignItems: 'center',
     },
+    // -- title/text styles --
     title: {
         fontSize: 20,
         fontFamily: 'Georgia',
         fontWeight: '800',
-        color: '#4E3629',
+        color: theme.text,
         marginBottom: 14,
         marginTop: 6,
         textAlign: 'center',
@@ -334,6 +520,7 @@ const styles = StyleSheet.create({
         // centered, even though nothing sits on the left).
         paddingHorizontal: 90,
     },
+    // -- activity pill row styles --
     activityRow: {
         flexDirection: 'row',
         flexWrap: 'wrap',
@@ -347,8 +534,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         gap: 6,
         borderWidth: 1,
-        borderColor: '#C8C4B7',
-        backgroundColor: '#FFFFFF',
+        borderColor: theme.border,
+        backgroundColor: theme.surface,
         paddingVertical: 8,
         paddingHorizontal: 12,
         borderRadius: 18,
@@ -356,8 +543,9 @@ const styles = StyleSheet.create({
     activityPillText: {
         fontSize: 12,
         fontWeight: '700',
-        color: '#4E3629',
+        color: theme.text,
     },
+    // -- unit toggle row styles --
     unitToggleRow: {
         flexDirection: 'row',
         gap: 8,
@@ -365,8 +553,8 @@ const styles = StyleSheet.create({
     },
     unitToggle: {
         borderWidth: 1,
-        borderColor: '#C8C4B7',
-        backgroundColor: '#FFFFFF',
+        borderColor: theme.border,
+        backgroundColor: theme.surface,
         paddingVertical: 7,
         paddingHorizontal: 16,
         borderRadius: 14,
@@ -374,29 +562,30 @@ const styles = StyleSheet.create({
     unitToggleText: {
         fontSize: 12,
         fontWeight: '700',
-        color: '#4E3629',
+        color: theme.text,
     },
+    // -- amount input styles (web text field / native display field) --
     textInput: {
         height: 46,
         width: '100%',
         maxWidth: 260,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: theme.surface,
         borderWidth: 1,
-        borderColor: '#C8C4B7',
+        borderColor: theme.border,
         borderRadius: 8,
         paddingHorizontal: 16,
         fontSize: 18,
         fontWeight: '600',
-        color: '#4E3629',
+        color: theme.text,
         textAlign: 'center',
     },
     inputField: {
         minHeight: 46,
         width: '100%',
         maxWidth: 260,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: theme.surface,
         borderWidth: 1,
-        borderColor: '#C8C4B7',
+        borderColor: theme.border,
         borderRadius: 8,
         paddingHorizontal: 16,
         paddingVertical: 6,
@@ -406,11 +595,12 @@ const styles = StyleSheet.create({
     previewText: {
         fontSize: 12,
         fontWeight: '700',
-        color: '#8E8E93',
+        color: theme.subtext,
         textAlign: 'center',
         marginTop: 6,
         marginBottom: 12,
     },
+    // -- close button styles --
     closeButton: {
         position: 'absolute',
         top: 14,
@@ -426,6 +616,7 @@ const styles = StyleSheet.create({
         color: '#FFF',
         letterSpacing: 0.5,
     },
+    // -- quick-amount pill styles --
     quickActionRow: {
         flexDirection: 'row',
         justifyContent: 'center',
@@ -436,9 +627,9 @@ const styles = StyleSheet.create({
         alignSelf: 'center',
     },
     quickActionPill: {
-        backgroundColor: '#F4F1EA',
+        backgroundColor: theme.background,
         borderWidth: 1,
-        borderColor: '#C8C4B7',
+        borderColor: theme.border,
         paddingVertical: 8,
         paddingHorizontal: 10,
         borderRadius: 16,
@@ -448,8 +639,9 @@ const styles = StyleSheet.create({
     quickActionPillText: {
         fontSize: 11,
         fontWeight: '700',
-        color: '#4E3629',
+        color: theme.text,
     },
+    // -- native tap-keypad styles --
     grid: {
         width: '100%',
         maxWidth: 280,
@@ -464,21 +656,22 @@ const styles = StyleSheet.create({
     key: {
         flex: 1,
         height: 44,
-        backgroundColor: '#F4F1EA',
+        backgroundColor: theme.background,
         borderWidth: 1,
-        borderColor: '#C8C4B7',
+        borderColor: theme.border,
         borderRadius: 8,
         justifyContent: 'center',
         alignItems: 'center',
     },
     keyPressed: {
-        backgroundColor: '#E5E1D4',
+        backgroundColor: theme.border,
     },
     keyText: {
         fontSize: 18,
         fontWeight: '600',
-        color: '#4E3629',
+        color: theme.text,
     },
+    // -- submit button styles --
     submitButton: {
         marginTop: 16,
         height: 46,

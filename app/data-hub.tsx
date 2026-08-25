@@ -5,22 +5,19 @@
 // "/data-hub", not a tab within (teacher-tabs). Screen for internal staff
 // to see raw/aggregated data across every profile in the database.
 
-// React + three hooks:
+// React + two hooks:
 // - useEffect: run side effects (like fetching data) after render.
-// - useMemo: cache ("memoize") a computed value so it's only recalculated
-//   when its listed dependencies change, instead of on every render.
 // - useState: component-local state.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 // A grab-bag of React Native UI primitives used on this screen:
 // - ActivityIndicator: the spinning "loading..." wheel.
-// - Alert: native popup dialogs.
 // - Pressable: tappable element.
 // - ScrollView: a scrollable container (needed because this screen's
 //   content can be taller than the visible screen).
 // - StyleSheet: builds style objects.
 // - Text / View: text and layout containers.
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
 
 // Shared color palette (light/dark theme colors) defined once for the
 // whole app so screens stay visually consistent.
@@ -28,6 +25,7 @@ import { useRouter } from 'expo-router';
 import { colors } from '../commonStyles';
 import WebContainer from '../components/WebContainer';
 import { getResolvedRole, resolveAppShellPath } from '../lib/access';
+import { showAlert } from '../lib/confirmAlert';
 
 // A helper function that formats a raw mileage number into a nicely
 // displayed string (e.g. rounding, adding "mi", etc.) — defined once in
@@ -38,7 +36,8 @@ import { formatMiles } from '../lib/trails';
 import { supabase } from '../utils/supabase';
 
 // TypeScript "type" describing the shape of each row this screen expects
-// back from the "profiles" table query below. Declaring this means
+// back from the get_okage_data_hub_top_profiles RPC below (see
+// supabase/fix-data-hub-okage-summary.sql). Declaring this means
 // TypeScript will flag it if we try to use a field that doesn't exist, or
 // use a field as the wrong type (e.g. treating `id` as a number).
 type HubRow = {
@@ -51,6 +50,15 @@ type HubRow = {
     app_role: string | null;
     school_district_name: string | null;
     total_miles_walked: number | null;
+};
+
+// Shape of the single summary row from get_okage_data_hub_summary.
+type HubSummary = {
+    total_profiles: number;
+    total_teachers: number;
+    total_admins: number;
+    total_professors: number;
+    total_miles: number;
 };
 
 export default function DataHubScreen() {
@@ -67,23 +75,37 @@ export default function DataHubScreen() {
     // Starts as `true` because we haven't loaded anything yet.
     const [loading, setLoading] = useState(true);
 
-    // The list of profile rows fetched from Supabase. Starts as an empty
-    // array. "<HubRow[]>" tells TypeScript this state will always hold an
-    // array of HubRow objects.
+    // The top-12-by-mileage profile rows fetched from Supabase (not the
+    // whole table -- see get_okage_data_hub_top_profiles below). Starts as
+    // an empty array. "<HubRow[]>" tells TypeScript this state will always
+    // hold an array of HubRow objects.
     const [rows, setRows] = useState<HubRow[]>([]);
+
+    // The 5 aggregate counts, computed server-side over the FULL table by
+    // get_okage_data_hub_summary rather than client-side over `rows` (which
+    // only ever holds 12 rows now). Starts null so the summary cards can
+    // render a loading-safe fallback until the RPC resolves.
+    const [summary, setSummary] = useState<HubSummary | null>(null);
 
     // Access guard, same pattern as app/(okage-tabs)/_layout.tsx's: this
     // screen must never render its real content for anyone who isn't
     // OKAGE staff. Unlike the OKAGE tab group, this route has no shared
     // layout of its own to hold that check -- it sits directly under
     // app/, unwrapped by any group -- so previously it had none at all.
-    // The RLS policy backing the query below (profiles_select_same_district
-    // in supabase/fix-teacher-profile-read-access.sql) is intentionally
-    // broad -- built for the leaderboard feature, it lets ANY authenticated
-    // user, including a student, read every profile in their own district.
-    // With no route-level check, any signed-in user who found this URL
-    // could see a real district-wide roster (names, roles, mileage) meant
+    // This used to matter even more than a normal route guard: the data
+    // query below used to read the `profiles` table directly under a since-
+    // removed RLS policy (profiles_select_same_district, closed by
+    // supabase/fix-profiles-same-district-column-leak.sql) that let ANY
+    // authenticated user, including a student, read every profile in their
+    // own district. With no route-level check, any signed-in user who
+    // found this URL could see a real roster (names, roles, mileage) meant
     // for internal staff. Confirmed live during an /impeccable audit.
+    // The query itself no longer depends on any direct-table policy at all
+    // (see get_okage_data_hub_summary/get_okage_data_hub_top_profiles
+    // below, both SECURITY DEFINER and independently re-verifying OKAGE
+    // staff server-side) -- this client-side check stays anyway so the
+    // screen doesn't even attempt/flash its real layout for a non-OKAGE
+    // visitor while the RPCs are in flight.
     useEffect(() => {
         let isMounted = true;
 
@@ -140,31 +162,33 @@ export default function DataHubScreen() {
 
         async function loadData() {
             try {
-                const { data, error } = await supabase
-                    .from('profiles')
-                    // Only fetch the specific columns this screen needs
-                    // (more efficient than pulling every column).
-                    .select('id, display_name, username, app_role, school_district_name, total_miles_walked')
-                    // Sort so the highest-mileage walkers come first.
-                    // ascending: false = descending order (biggest first).
-                    .order('total_miles_walked', { ascending: false });
+                // Two narrow RPCs instead of one `select *`-shaped pull of
+                // the whole `profiles` table: one computes the 5 summary
+                // aggregates server-side (over every row, without shipping
+                // every row to the client), the other returns just the
+                // top-12-by-mileage rows this screen actually displays.
+                // Both independently re-verify the caller is OKAGE staff
+                // (see supabase/fix-data-hub-okage-summary.sql) rather than
+                // relying on any direct-table RLS policy. Run in parallel
+                // since neither depends on the other's result.
+                const [summaryResult, topProfilesResult] = await Promise.all([
+                    supabase.rpc('get_okage_data_hub_summary').single(),
+                    supabase.rpc('get_okage_data_hub_top_profiles', { row_limit: 12 }),
+                ]);
 
-                // If Supabase returned an error object, throw it so it's
-                // caught by the catch block below instead of silently
-                // continuing with bad/missing data.
-                if (error) throw error;
+                if (summaryResult.error) throw summaryResult.error;
+                if (topProfilesResult.error) throw topProfilesResult.error;
 
                 // Only update state if the component is still mounted.
-                // `data || []` guards against `data` being null/undefined
-                // by falling back to an empty array. `as HubRow[]` tells
-                // TypeScript to trust that the returned rows match our
-                // HubRow shape (a type assertion, not a runtime check).
-                if (mounted) setRows((data || []) as HubRow[]);
+                if (mounted) {
+                    setSummary(summaryResult.data as HubSummary);
+                    setRows((topProfilesResult.data || []) as HubRow[]);
+                }
             } catch (err: any) {
                 // Any failure (network issue, bad query, thrown error
                 // above) ends up here. Show the user a native alert with
                 // whatever message is available, or a generic fallback.
-                Alert.alert('Data Hub Error', err.message || 'Could not load full dataset.');
+                showAlert('Data Hub Error', err.message || 'Could not load full dataset.');
             } finally {
                 // "finally" runs whether the try succeeded or failed —
                 // guarantees the loading spinner goes away either way.
@@ -183,27 +207,6 @@ export default function DataHubScreen() {
             mounted = false;
         };
     }, [roleChecked]);
-
-    // useMemo recomputes this `summary` object only when `rows` changes
-    // (not on every single re-render), which is a small performance
-    // optimization since these are simple aggregate calculations over the
-    // full row list.
-    const summary = useMemo(() => {
-        return {
-            // Total number of profiles loaded.
-            profiles: rows.length,
-            // Count how many rows have app_role exactly equal to 'teacher'.
-            teachers: rows.filter((row) => row.app_role === 'teacher').length,
-            admins: rows.filter((row) => row.app_role === 'admin').length,
-            professors: rows.filter((row) => row.app_role === 'professor').length,
-            // .reduce() walks the array accumulating a running total.
-            // `sum` starts at 0 (the second argument to reduce), and for
-            // each row we add its miles walked, treating null/undefined as
-            // 0 via `|| 0`, and running it through Number() in case the
-            // database ever returns it as a string.
-            totalMiles: rows.reduce((sum, row) => sum + Number(row.total_miles_walked || 0), 0),
-        };
-    }, [rows]);
 
     // While the access check or the initial fetch is still running, show a
     // full-screen loading spinner instead of the (currently empty) data.
@@ -239,46 +242,46 @@ export default function DataHubScreen() {
                 with different label text and value. */}
             <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <Text style={[styles.label, { color: theme.subtext }]}>Total Profiles</Text>
-                <Text style={[styles.value, { color: theme.text }]}>{summary.profiles}</Text>
+                <Text style={[styles.value, { color: theme.text }]}>{summary?.total_profiles ?? 0}</Text>
             </View>
             <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <Text style={[styles.label, { color: theme.subtext }]}>Teachers</Text>
-                <Text style={[styles.value, { color: theme.text }]}>{summary.teachers}</Text>
+                <Text style={[styles.value, { color: theme.text }]}>{summary?.total_teachers ?? 0}</Text>
             </View>
             <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <Text style={[styles.label, { color: theme.subtext }]}>Admins</Text>
-                <Text style={[styles.value, { color: theme.text }]}>{summary.admins}</Text>
+                <Text style={[styles.value, { color: theme.text }]}>{summary?.total_admins ?? 0}</Text>
             </View>
             <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <Text style={[styles.label, { color: theme.subtext }]}>Professors</Text>
-                <Text style={[styles.value, { color: theme.text }]}>{summary.professors}</Text>
+                <Text style={[styles.value, { color: theme.text }]}>{summary?.total_professors ?? 0}</Text>
             </View>
             <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                 <Text style={[styles.label, { color: theme.subtext }]}>Total Miles</Text>
                 {/* formatMiles() turns the raw number into a display-ready
                     string (e.g. "1,234.5 mi" style formatting lives in
                     lib/trails.ts). */}
-                <Text style={[styles.value, { color: theme.text }]}>{formatMiles(summary.totalMiles)}</Text>
+                <Text style={[styles.value, { color: theme.text }]}>{formatMiles(summary?.total_miles ?? 0)}</Text>
             </View>
 
             {/* A button that, for now, just shows a placeholder alert
                 explaining that a real CSV/PDF export isn't wired up yet.
                 This is a TODO/stub, not a finished feature. */}
-            <Pressable style={[styles.button, { backgroundColor: theme.accent }]} onPress={() => Alert.alert('Export', 'This is where a private CSV/PDF export can be wired to Supabase or server-side reporting.')}>
+            <Pressable style={[styles.button, { backgroundColor: theme.accent }]} onPress={() => showAlert('Export', 'This is where a private CSV/PDF export can be wired to Supabase or server-side reporting.')}>
                 <Text style={styles.buttonText}>Export Internal Report</Text>
             </Pressable>
 
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>All profiles</Text>
-            {/* .slice(0, 12) takes only the first 12 rows (already sorted
-                by miles walked, descending) so this screen doesn't try to
-                render a potentially huge list all at once — a simple form
-                of pagination/truncation.
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Top 12 by mileage</Text>
+            {/* `rows` already IS just the top 12 (sorted by miles walked,
+                descending) -- get_okage_data_hub_top_profiles does the
+                limiting server-side now, rather than fetching the whole
+                table and slicing it client-side.
                 .map() transforms each row object into a <View> element.
                 `key={row.id}` is required by React whenever you render a
                 list — it lets React efficiently track which item is which
                 across re-renders instead of re-rendering the whole list
                 from scratch. */}
-            {rows.slice(0, 12).map((row) => (
+            {rows.map((row) => (
                 <View key={row.id} style={[styles.row, { backgroundColor: theme.surface, borderColor: theme.border }]}>
                     {/* Prefer display_name; if it's empty/falsy, fall back
                         to username via the `||` operator. */}

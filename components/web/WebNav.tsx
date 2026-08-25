@@ -54,7 +54,7 @@ export default function WebNav({ active }: Props) {
     );
 
     return (
-        <View style={[styles.nav, { backgroundColor: theme.surfaceBase, borderBottomColor: theme.border }]}>
+        <View role="navigation" style={[styles.nav, { backgroundColor: theme.surfaceBase, borderBottomColor: theme.border }]}>
             <View style={styles.navInner}>
                 {/* Previously an unpadded Pressable -- measured 132.6x23px
                     live, well under the 44px touch-target guideline every

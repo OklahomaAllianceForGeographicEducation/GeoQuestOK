@@ -21,14 +21,39 @@
 // device treat it as unseen again without touching anyone's other
 // progress.
 
+// FILE OVERVIEW (for someone new to this codebase):
+// This module has no Supabase/network calls at all — it's pure content
+// (the TOURS data below) plus a thin persistence layer built on
+// AsyncStorage (React Native's simple on-device key/value store, roughly
+// like localStorage on web but async). It answers two questions for
+// components/OnboardingTour.tsx:
+//   1. "What should this tour say, and in what order?" (the TOURS constant)
+//   2. "Has this device already seen this tour?" (hasSeenTour/markTourSeen)
+// It also exposes a tiny pub/sub mechanism (requestTourReplay /
+// onTourReplayRequested) so a "Replay Tour" button on an account screen can
+// re-trigger the tour without holding a direct reference to it.
+//
+// Exports:
+//   - Types: `TourAudience`, `TourStep`, `Tour`.
+//   - `TOURS` — the actual step-by-step content for every app shell.
+//   - `hasSeenTour(tourId, version)` / `markTourSeen(tourId, version)` —
+//     read/write per-device "already saw this tour version" state.
+//   - `requestTourReplay(tourId)` / `onTourReplayRequested(tourId, listener)`
+//     — in-memory event bus for the "replay tour" feature.
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// One entry per app shell in lib/access.ts's resolveAppShellPath.
+// One entry per app shell in lib/access.ts's resolveAppShellPath. Each
+// value corresponds to one of the five route groups under app/ (e.g.
+// `(tabs)` for student, `(teacher-tabs)` for teacher, etc.) and therefore
+// to one independent guided tour.
 export type TourAudience = 'student' | 'teacher' | 'okage' | 'admin' | 'site_admin';
 
+// One screen/highlight in a guided tour. See the file header above for the
+// two kinds of step this can represent (welcome/closing card vs. spotlight).
 export type TourStep = {
-    title: string;
-    body: string;
+    title: string; // Heading shown on the step's card.
+    body: string; // Explanatory copy shown under the title.
     // Ionicons glyph name shown on a welcome/closing card (ignored once
     // `targetKey` is set -- a spotlight step points at the real control
     // instead of showing an icon).
@@ -43,12 +68,20 @@ export type TourStep = {
     route?: string;
 };
 
+// A complete guided tour for one app shell/audience.
 export type Tour = {
-    id: TourAudience;
-    version: number;
-    steps: TourStep[];
+    id: TourAudience; // Which audience this tour belongs to (matches the key it's stored under in TOURS below).
+    version: number; // Bumped to force every device to treat this tour as unseen again (see storageKey below).
+    steps: TourStep[]; // The ordered steps shown one after another.
 };
 
+// The actual tour content for every app shell, keyed by TourAudience. Each
+// shell's own _layout.tsx (e.g. app/(tabs)/_layout.tsx for students) reads
+// its own entry here and feeds it into <OnboardingTour>. This constant has
+// no logic of its own — it's just data — but note the `version` field on
+// each tour: editing wording alone doesn't require a version bump (existing
+// "seen" users just won't see the wording change), but if you want
+// everyone to see the tour again after an edit, increment `version`.
 export const TOURS: Record<TourAudience, Tour> = {
     student: {
         id: 'student',
@@ -264,6 +297,12 @@ export const TOURS: Record<TourAudience, Tour> = {
 
 const STORAGE_PREFIX = 'geoquestok:onboarding';
 
+// Builds the AsyncStorage key used to remember whether a specific
+// (tourId, version) pair has been seen on this device. Including the
+// version in the key is what makes bumping `version` in TOURS above
+// effectively reset "seen" state — a new version means a brand new key
+// that's never been written, so hasSeenTour reports false again even
+// though the OLD version's key is still sitting there marked "seen".
 function storageKey(tourId: TourAudience, version: number): string {
     return `${STORAGE_PREFIX}:${tourId}:v${version}`;
 }
@@ -272,6 +311,13 @@ function storageKey(tourId: TourAudience, version: number): string {
 // exact version of this tour. Fails "seen" (not "unseen") on a storage
 // error — a broken AsyncStorage read should never make the tour reappear
 // on every single app open.
+// Parameters:
+//   - tourId: which audience's tour to check.
+//   - version: the specific tour version being checked (from TOURS[tourId].version).
+// Returns: a Promise resolving to true if this device already dismissed
+// this version of this tour, false if it hasn't (or storage came back empty).
+// Side effects: reads one key from AsyncStorage (on-device storage only —
+// no network/Supabase call).
 export async function hasSeenTour(tourId: TourAudience, version: number): Promise<boolean> {
     try {
         return (await AsyncStorage.getItem(storageKey(tourId, version))) === 'seen';
@@ -280,6 +326,12 @@ export async function hasSeenTour(tourId: TourAudience, version: number): Promis
     }
 }
 
+// Records that this device has now dismissed this exact tour version, so
+// hasSeenTour returns true for it from now on.
+// Parameters: same as hasSeenTour above.
+// Returns: a Promise that resolves once the write attempt finishes (whether
+// or not it actually succeeded — see the catch below).
+// Side effects: writes one key to AsyncStorage (on-device only).
 export async function markTourSeen(tourId: TourAudience, version: number): Promise<void> {
     try {
         await AsyncStorage.setItem(storageKey(tourId, version), 'seen');
@@ -294,7 +346,18 @@ export async function markTourSeen(tourId: TourAudience, version: number): Promi
 // in that shell's _layout.tsx, without either of them needing a direct
 // reference to the other. Doesn't touch the "seen" storage above -- a
 // replay is a one-off, explicit request, not a change to first-run state.
+//
+// This is a plain in-memory pub/sub (observer pattern): a mounted
+// OnboardingTour instance calls onTourReplayRequested to register a
+// callback, and some other, unrelated component (a settings screen) calls
+// requestTourReplay to fire it — the two never need to know about each
+// other directly, only about this shared module.
 type ReplayListener = () => void;
+
+// One Set of listener callbacks per audience. A Set (not an array) is used
+// so a given listener function can only be registered once per audience,
+// and so removal (see the returned unsubscribe function below) is an O(1)
+// `.delete()` rather than an array search-and-splice.
 const replayListeners: Record<TourAudience, Set<ReplayListener>> = {
     student: new Set(),
     teacher: new Set(),
@@ -303,10 +366,26 @@ const replayListeners: Record<TourAudience, Set<ReplayListener>> = {
     site_admin: new Set(),
 };
 
+// Fires every listener currently registered for this audience's tour —
+// i.e. "please show the tour again right now." Typically called from a
+// "Replay Tour" button's onPress handler.
+// Parameters: tourId — which audience's tour to replay.
+// Returns: nothing. Side effects: synchronously invokes every registered
+// listener for that audience (no storage/network access here).
 export function requestTourReplay(tourId: TourAudience): void {
     replayListeners[tourId].forEach((listener) => listener());
 }
 
+// Registers a callback to run whenever requestTourReplay(tourId) is called
+// for this same audience. Typically called once from OnboardingTour's own
+// setup (e.g. inside a useEffect) so it can react to a replay request by
+// resetting its internal step index and showing itself again.
+// Parameters:
+//   - tourId: which audience to listen for replay requests on.
+//   - listener: the callback to invoke on each replay request.
+// Returns: an "unsubscribe" function — call it (e.g. in a useEffect cleanup)
+// to stop this listener from being invoked, and to remove it from the Set
+// above so it isn't kept around after the caller no longer needs it.
 export function onTourReplayRequested(tourId: TourAudience, listener: ReplayListener): () => void {
     replayListeners[tourId].add(listener);
     return () => replayListeners[tourId].delete(listener);

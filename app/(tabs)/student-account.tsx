@@ -32,6 +32,7 @@ import Button from '../../components/Button';
 import ModalBackdrop from '../../components/ModalBackdrop';
 import { signOutAndRedirect } from '../../lib/auth';
 import { confirmAlert } from '../../lib/confirmAlert';
+import { confirmDeleteAccount } from '../../lib/deleteAccount';
 import { requestTourReplay } from '../../lib/onboarding';
 import { formatActivitySummary } from '../../lib/activityTypes';
 import { ensureProfileRow } from '../../lib/profiles';
@@ -214,15 +215,6 @@ function getAccountStyles(theme: Theme) {
         summaryText: {
             color: theme.subtext,
             fontSize: 13,
-        },
-        // NOTE: summaryRowContent and summaryValue are nearly identical
-        // style objects (both accent-colored, bold, 14px) — summaryValue
-        // is the one actually used in the JSX below; summaryRowContent
-        // appears to be unused dead code left over from a rename.
-        summaryRowContent: {
-            color: theme.accent,
-            fontWeight: '700',
-            fontSize: 14,
         },
         summaryValue: {
             color: theme.accent,
@@ -440,6 +432,9 @@ export default function AccountScreen() {
     const [newGroupCode, setNewGroupCode] = useState('');
     const [joiningGroup, setJoiningGroup] = useState(false);
 
+    // --- Delete account state ---
+    const [deletingAccount, setDeletingAccount] = useState(false);
+
     // Fetch the live banned words database dictionary on mount
     useEffect(() => {
         async function loadBannedWords() {
@@ -450,6 +445,12 @@ export default function AccountScreen() {
 
             if (data && !error) {
                 setRemoteBannedWords(data.map(row => row.word));
+            } else if (error) {
+                // Moderation still runs (utils/profanity.ts has its own
+                // static wordlist layers) but silently degrades without
+                // this remote list, so surface it rather than pretending
+                // nothing's wrong.
+                console.error('Could not load remote moderation wordlist:', error.message);
             }
         }
         void loadBannedWords();
@@ -819,14 +820,14 @@ export default function AccountScreen() {
 
         try {
             setJoiningGroup(true);
-            const { data: targetClass } = await supabase.from('classes').select('class_name').eq('id', code).maybeSingle();
-
-            if (!targetClass) {
-                showAlert('Not Found', 'No group exists with that invite code.');
-                return;
-            }
-
-            const { error } = await supabase.from('class_memberships').insert({ user_id: userId, class_id: code });
+            // Looks the class up AND enrolls the caller in one server-side
+            // RPC call, rather than a client-side select-then-insert — a
+            // student has no direct SELECT access to a class they aren't
+            // already a member of (classes.id doubles as the join code, and
+            // that table's RLS no longer allows browsing it wholesale). See
+            // supabase/fix-classes-join-code-enumeration.sql. Returns zero
+            // rows if the code doesn't match any class.
+            const { data, error } = await supabase.rpc('join_class_by_code', { target_class_id: code });
             if (error) {
                 // Postgres error code '23505' means "unique constraint
                 // violation" — this specific error means the student is
@@ -836,9 +837,11 @@ export default function AccountScreen() {
                 // generic error.
                 if (error.code === '23505') showAlert('Active', 'You belong to this class track already.');
                 else throw error;
+            } else if (!data || data.length === 0) {
+                showAlert('Not Found', 'No group exists with that invite code.');
             } else {
                 setNewGroupCode('');
-                showAlert('Success', `Joined ${targetClass.class_name}!`);
+                showAlert('Success', `Joined ${data[0].class_name}!`);
                 await fetchMemberships();
             }
         } catch (error: any) {
@@ -856,7 +859,11 @@ export default function AccountScreen() {
                 text: 'Leave',
                 style: 'destructive',
                 onPress: async () => {
-                    await supabase.from('class_memberships').delete().eq('id', membershipId);
+                    const { error } = await supabase.from('class_memberships').delete().eq('id', membershipId);
+                    if (error) {
+                        showAlert('Error', error.message || 'Could not leave that group. Please try again.');
+                        return;
+                    }
                     await fetchMemberships();
                 }
             }
@@ -910,6 +917,25 @@ export default function AccountScreen() {
                         accessibilityRole="button"
                     >
                         <Text style={{ color: theme.error, fontWeight: '600', fontSize: 14 }}>Sign Out</Text>
+                    </Pressable>
+
+                    {/* Deliberately understated (plain text, no border/pill,
+                        muted color) rather than matched to Sign Out's
+                        visual weight -- this is permanent and wipes
+                        everything, so it shouldn't be one careless tap
+                        away from anything else on this screen. The
+                        confirmation dialog carries the actual warning. */}
+                    <Pressable
+                        onPress={() => confirmDeleteAccount(router, setDeletingAccount)}
+                        disabled={deletingAccount}
+                        style={{ alignSelf: 'center', marginTop: 20, paddingVertical: 13, paddingHorizontal: 18 }}
+                        accessibilityRole="button"
+                    >
+                        {deletingAccount ? (
+                            <ActivityIndicator color={theme.subtext} size="small" />
+                        ) : (
+                            <Text style={{ color: theme.subtext, fontWeight: '600', fontSize: 13, textDecorationLine: 'underline' }}>Delete Account</Text>
+                        )}
                     </Pressable>
                 </View>
 

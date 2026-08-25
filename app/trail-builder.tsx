@@ -8,10 +8,11 @@
 
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, useColorScheme, View } from 'react-native';
 import { colors } from '../commonStyles';
 import WebContainer from '../components/WebContainer';
 import { getResolvedRole, resolveAppShellPath } from '../lib/access';
+import { showAlert } from '../lib/confirmAlert';
 
 // TrailDifficulty is a union type of the allowed difficulty strings (e.g.
 // 'Easy' | 'Moderate' | ...) defined in lib/trails.ts. TrailSummary
@@ -168,7 +169,7 @@ export default function TrailBuilderScreen() {
 
     const handleSave = async () => {
         if (!canSave) {
-            Alert.alert('Missing Information', 'Please add a trail name and miles before saving.');
+            showAlert('Missing Information', 'Please add a trail name and miles before saving.');
             return;
         }
 
@@ -216,7 +217,7 @@ export default function TrailBuilderScreen() {
             const { error } = await supabase.from('trails').upsert(payload, { onConflict: 'id' });
             if (error) throw error;
 
-            Alert.alert('Saved', 'Custom trail saved to Supabase.');
+            showAlert('Saved', 'Custom trail saved to Supabase.');
             // Clear the form back to empty so the user can immediately
             // start building another trail without manually erasing
             // everything.
@@ -231,7 +232,7 @@ export default function TrailBuilderScreen() {
             const list = await fetchTrailList();
             setExistingTrails(list);
         } catch (err: any) {
-            Alert.alert('Save Failed', err.message || 'Could not save the custom trail.');
+            showAlert('Save Failed', err.message || 'Could not save the custom trail.');
         } finally {
             setSaving(false);
         }

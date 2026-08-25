@@ -586,7 +586,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     formTitle: { fontSize: 15, fontWeight: '800', fontFamily: 'Georgia', marginBottom: 4 },
     textInput: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14 },
     textArea: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, minHeight: 70, textAlignVertical: 'top' },
-    saveButton: { marginTop: 16, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+    saveButton: { marginTop: 16, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
     saveButtonText: { color: '#FFF', fontWeight: '700', fontSize: 13 },
 
     standardCard: {
@@ -618,5 +618,5 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     standardDescription: { fontSize: 13.5, lineHeight: 18, marginTop: 6 },
     standardSource: { fontSize: 10.5, fontStyle: 'italic', marginTop: 6 },
     standardActionRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
-    iconButton: { borderWidth: 1, borderRadius: 10, padding: 8 },
+    iconButton: { borderWidth: 1, borderRadius: 10, padding: 14 },
 });

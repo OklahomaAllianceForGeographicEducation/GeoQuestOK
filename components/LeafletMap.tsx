@@ -21,6 +21,21 @@ const flagIcon = (emoji: string) => L.divIcon({
 
 // ─── Re-center button ─────────────────────────────────────────────────────────
 
+// RecenterButton
+// A small floating circular button (rendered as a raw HTML <div> since this
+// file only ever runs on web -- see the file-level comment above) pinned to
+// the bottom-right corner of the map. Tapping/clicking it smoothly flies
+// the Leaflet map's camera back to `position`, in case the student has
+// panned/zoomed away from their current location.
+// Props:
+// - position: the [latitude, longitude] pair to fly the camera back to
+//   (this is always the student's current position -- see how it's called
+//   below).
+// - theme: the active light/dark theme colors, used for the button's
+//   background/border/icon color.
+// Returns: a plain HTML <div> styled as a circular button (this file is
+// web-only, so plain DOM elements + inline CSS are used directly instead of
+// React Native View/StyleSheet).
 function RecenterButton({ position, theme }: { position: [number, number]; theme: any }) {
     const map = useMap();
     return (
@@ -112,6 +127,38 @@ function BoundsUpdater({ trailCoords }: { trailCoords: any[] }) {
 
 // ─── Main Leaflet map ─────────────────────────────────────────────────────────
 
+// LeafletMap
+// The exported component itself -- the web implementation of the trail map
+// (its native counterpart is TrailMap.native.tsx; this file is only ever
+// reached via TrailMap.web.tsx's dynamic import, see the file-level comment
+// above). Renders a Leaflet map showing the trail route (split into
+// "walked" and "remaining" colored segments), the start/end flags, every
+// landmark along the trail (locked or unlocked depending on progress), and
+// the student's current position, plus a re-center button.
+// Props (all typed `any` here -- this component receives whatever
+// TrailMap.web.tsx passes through from the shared native/web trail-map
+// props):
+// - walkedCoords / remainingCoords: arrays of {latitude, longitude} points
+//   for the portion of the route already walked vs. not yet walked.
+// - allLandmarks: every landmark on this trail, each with a `mileMarker`
+//   used to decide whether it's been "passed" yet.
+// - trailCoords: the full ordered route (every vertex), used for the
+//   start/end flags and the initial camera fit (see BoundsUpdater above).
+// - trailRegion: an optional {latitude, longitude} used as the map's
+//   initial center when provided (falls back to the user's position).
+// - userPosition: the student's current {latitude, longitude}, shown as a
+//   "you are here" marker and used to close the walked/remaining line gap
+//   (see the comment on passedMile/walkedLatLngs below).
+// - milesWalked: how far the student has walked so far, in miles --
+//   determines which landmarks count as "passed" (unlocked).
+// - dStyles: dashboard-provided styles applied to the map's outer
+//   container.
+// - theme: the active light/dark theme colors.
+// - onLandmarkPress: called with a landmark when its marker is tapped,
+//   but only if that landmark has already been passed (locked landmarks
+//   ignore taps -- see the CircleMarker eventHandlers below).
+// Returns: a React Native <View> (sized via dStyles.mapContainer) wrapping
+// a react-leaflet <MapContainer> with all the trail's visual layers.
 export default function LeafletMap({
     walkedCoords,
     remainingCoords,
@@ -154,7 +201,7 @@ export default function LeafletMap({
     const passedMile = milesWalked;
 
     return (
-        <View style={dStyles.mapContainer}>
+        <View style={dStyles.mapContainer} accessibilityLabel="Trail map showing your progress and nearby landmarks">
             <MapContainer
                 center={center}
                 zoom={14}

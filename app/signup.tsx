@@ -24,8 +24,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, Theme } from '../commonStyles';
 import Button from '../components/Button';
+import PartnershipAcknowledgement from '../components/PartnershipAcknowledgement';
 import WebContainer from '../components/WebContainer';
 import { resolveAppShellPath } from '../lib/access';
+import { Sentry } from '../lib/sentry';
 // A profanity/appropriateness filter used to reject inappropriate usernames.
 import { checkIsUsernameAppropriate } from '../utils/profanity';
 import { supabase } from '../utils/supabase';
@@ -197,6 +199,7 @@ export default function SignUp() {
                 }
             } catch (err: any) {
                 console.error("Failed querying district registries matrix:", err);
+                Sentry.captureException(err);
                 setDistrictSearchError(
                     err?.message === 'TIMEOUT'
                         ? 'District search timed out. Check your connection and try again.'
@@ -251,6 +254,7 @@ export default function SignUp() {
                 }
             } catch (err: any) {
                 console.error("Failed querying school registries matrix:", err);
+                Sentry.captureException(err);
                 setSchoolSearchError(
                     err?.message === 'TIMEOUT'
                         ? 'School search timed out. Check your connection and try again.'
@@ -441,6 +445,7 @@ export default function SignUp() {
 
             await Promise.race([performSignUp(), timeoutPromise]);
         } catch (err: any) {
+            Sentry.captureException(err);
             if (err.message === 'TIMEOUT') {
                 setFormError(
                     "This is taking longer than expected. Check your internet connection and try again. If your account was actually created, try logging in instead of signing up again."
@@ -469,7 +474,7 @@ export default function SignUp() {
                     into view. It used to sit next to the button, where a
                     scroll-to-top hid it instead of revealing it -- the
                     opposite of what the scroll was for. */}
-                {formError && <Text style={styles.formError}>{formError}</Text>}
+                {formError && <Text style={styles.formError} accessibilityLiveRegion="assertive" role="alert">{formError}</Text>}
 
                 {/* Same partnership acknowledgement shown on login.tsx and
                     reset-password.tsx (and the student/teacher account
@@ -478,12 +483,7 @@ export default function SignUp() {
                     email, password, and (for educators) a real school
                     district, making it the highest-scrutiny moment in the
                     flow to carry no trust signal at all. */}
-                <Text style={styles.acknowledgementText}>
-                    The GeoQuestOK app is a partnership between the Oklahoma State Department of Education’s
-                    Health & Physical Education Department and the Oklahoma Alliance for Geographic Education.
-                    This program works to fulfill the “Walk Across Oklahoma” foundation created by Oklahoma House
-                    Bill 1647.
-                </Text>
+                <PartnershipAcknowledgement style={styles.acknowledgementText} />
 
                 {/* Primary Segment Selection */}
                 <Text style={styles.sectionLabel}>Choose your account type</Text>
@@ -491,7 +491,7 @@ export default function SignUp() {
                     Native has no built-in radio button component, so this
                     is hand-built from Pressable + a circular View that
                     fills in when selected. */}
-                <View style={styles.radioGroup}>
+                <View style={styles.radioGroup} accessibilityRole="radiogroup">
                     <Pressable
                         style={[styles.radioCard, primaryRole === 'student' && styles.radioCardActive]}
                         onPress={() => setPrimaryRole('student')}
@@ -527,7 +527,7 @@ export default function SignUp() {
                 {primaryRole === 'educator' && (
                     <View style={styles.subGroupContainer}>
                         <Text style={styles.sectionLabel}>Which best describes your role?</Text>
-                        <View style={{ gap: 8 }}>
+                        <View style={{ gap: 8 }} accessibilityRole="radiogroup">
                             <Pressable
                                 style={[styles.subGroupRowTab, educatorType === 'k12_teacher' && styles.activeSubGroupTab]}
                                 onPress={() => setEducatorType('k12_teacher')}
@@ -573,6 +573,7 @@ export default function SignUp() {
                 <Text style={styles.fieldLabel}>Full name</Text>
                 <TextInput
                     style={styles.input}
+                    accessibilityLabel="Full name"
                     placeholder="First & Last Name (For Official Records)"
                     placeholderTextColor={theme.subtext}
                     value={displayName}
@@ -590,6 +591,7 @@ export default function SignUp() {
                 <Text style={styles.fieldLabel}>Nickname</Text>
                 <TextInput
                     style={styles.input}
+                    accessibilityLabel="Nickname"
                     placeholder="App Nickname (Public Standings)"
                     placeholderTextColor={theme.subtext}
                     value={username}
@@ -601,6 +603,7 @@ export default function SignUp() {
                 <Text style={styles.fieldLabel}>Email</Text>
                 <TextInput
                     style={styles.input}
+                    accessibilityLabel="Email"
                     placeholder="you@school.org"
                     placeholderTextColor={theme.subtext}
                     value={email}
@@ -615,6 +618,7 @@ export default function SignUp() {
                 <Text style={styles.fieldLabel}>Password</Text>
                 <TextInput
                     style={styles.input}
+                    accessibilityLabel="Password"
                     placeholder="Password (6+ characters)"
                     placeholderTextColor={theme.subtext}
                     value={password}
@@ -627,6 +631,7 @@ export default function SignUp() {
                 <Text style={styles.fieldLabel}>Confirm password</Text>
                 <TextInput
                     style={styles.input}
+                    accessibilityLabel="Confirm password"
                     placeholder="Re-enter Password"
                     placeholderTextColor={theme.subtext}
                     value={confirmPassword}
@@ -645,6 +650,7 @@ export default function SignUp() {
                         <Text style={styles.sectionLabel}>Organization name</Text>
                         <TextInput
                             style={styles.input}
+                            accessibilityLabel="Organization name"
                             placeholder="e.g. Troop 271 or YMCA Adventure Club"
                             placeholderTextColor={theme.subtext}
                             value={organizationName}
@@ -674,6 +680,7 @@ export default function SignUp() {
                         <View style={{ position: 'relative', zIndex: 100 }}>
                             <TextInput
                                 style={styles.input}
+                                accessibilityLabel="School district"
                                 placeholder="e.g., Norman, Moore, Tulsa..."
                                 placeholderTextColor={theme.subtext}
                                 value={districtQuery}
@@ -763,6 +770,7 @@ export default function SignUp() {
                                 <View style={{ position: 'relative', zIndex: 90 }}>
                                     <TextInput
                                         style={styles.input}
+                                        accessibilityLabel={educatorType === 'site_admin' ? 'School you administer' : 'Assigned school building'}
                                         placeholder="e.g., Lincoln Elementary or High School"
                                         autoCorrect={false}
                                         placeholderTextColor={theme.subtext}
@@ -810,7 +818,7 @@ export default function SignUp() {
                             see gridCell's `minWidth: '45%'` below, which
                             forces roughly 2 cells per row since 2 × 45% +
                             gap ≈ 100%). */}
-                        <View style={styles.gridContainer}>
+                        <View style={styles.gridContainer} accessibilityRole="radiogroup">
                             {(['elementary', 'middle_school', 'high_school', 'split_campus'] as GradeRangeMetric[]).map((tier) => (
                                 <Pressable
                                     key={tier}

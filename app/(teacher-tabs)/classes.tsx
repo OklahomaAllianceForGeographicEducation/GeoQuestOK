@@ -10,7 +10,7 @@ import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
+    FlatList,
     KeyboardAvoidingView,
     Modal,
     Platform,
@@ -29,10 +29,11 @@ import { colors, Theme } from '../../commonStyles';
 import AdaptiveBlur from '../../components/AdaptiveBlur';
 import EdgeSwipeBack from '../../components/EdgeSwipeBack';
 import TourTarget from '../../components/tour/TourTarget';
-import { confirmAlert } from '../../lib/confirmAlert';
+import { confirmAlert, showAlert } from '../../lib/confirmAlert';
 import { fetchClassQuizParticipation, type QuizParticipation } from '../../lib/quizzes';
 import { formatMiles } from '../../lib/trails';
 import { supabase } from '../../utils/supabase';
+import { containsProfanity } from '../../utils/profanity';
 
 // One row from the "classes" table.
 type ClassRow = {
@@ -155,7 +156,7 @@ export default function ClassManagementHub() {
                 if (updatedMatch) setSelectedClass(updatedMatch);
             }
         } catch (err: any) {
-            Alert.alert("Data Error", err.message || "Could not load your classes. Please try again.");
+            showAlert("Data Error", err.message || "Could not load your classes. Please try again.");
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -225,7 +226,7 @@ export default function ClassManagementHub() {
                 setQuizParticipation(new Map());
             }
         } catch {
-            Alert.alert("Roster Error", "Could not load the class roster. Please try again.");
+            showAlert("Roster Error", "Could not load the class roster. Please try again.");
         } finally {
             setRosterLoading(false);
         }
@@ -247,7 +248,16 @@ export default function ClassManagementHub() {
     async function handleCreateClass() {
         const cleanName = newClassName.trim();
         if (!cleanName) {
-            Alert.alert("Missing Name", "Please enter an identifying class title.");
+            showAlert("Missing Name", "Please enter an identifying class title.");
+            return;
+        }
+
+        // The moderation filter used at signup/student-account was never
+        // wired up here, so a teacher could set a profane class name that
+        // then renders to every student in the roster. Found by an
+        // /impeccable audit.
+        if (containsProfanity(cleanName)) {
+            showAlert("Inappropriate Name", "Please choose a school-appropriate class title.");
             return;
         }
 
@@ -258,24 +268,16 @@ export default function ClassManagementHub() {
                 assignedJoinCode = generateRandomJoinCode();
             }
 
-            // Verify availability
-            // NOTE: this checks for a collision against the `id` column
-            // specifically (unlike (teacher-tabs)/index.tsx's version of
-            // this same flow, which checks the separate `join_code`
-            // column) — in THIS screen's insert below, `id` IS set equal
-            // to the join code itself (see `id: assignedJoinCode` in the
-            // insert call), so checking `id` here is consistent with that,
-            // but it does mean these two "create class" flows check
-            // uniqueness slightly differently from each other.
-            const { data: codeCheck } = await supabase
-                .from('classes')
-                .select('id')
-                .eq('id', assignedJoinCode)
-                .maybeSingle();
+            // Existence-only RPC rather than a direct select — a teacher
+            // has no SELECT access to a class they don't own or belong to
+            // (classes.id doubles as the join code, and that table's RLS
+            // no longer allows browsing it wholesale). See
+            // supabase/fix-classes-join-code-enumeration.sql.
+            const { data: codeTaken } = await supabase.rpc('is_class_code_taken', { code: assignedJoinCode });
 
-            if (codeCheck) {
+            if (codeTaken) {
                 assignedJoinCode += `-${Math.floor(10 + Math.random() * 90)}`;
-                Alert.alert('Code Adjusted', `Requested code taken. Assigned unique variant: ${assignedJoinCode}`);
+                showAlert('Code Adjusted', `Requested code taken. Assigned unique variant: ${assignedJoinCode}`);
             }
 
             const { error } = await supabase
@@ -296,10 +298,10 @@ export default function ClassManagementHub() {
             setNewClassName('');
             setCustomCodeInput('');
             setIsSheetOpen(false);
-            Alert.alert("Class Generated! ✨", `Give your students Join Code: ${assignedJoinCode}`);
+            showAlert("Class Generated! ✨", `Give your students Join Code: ${assignedJoinCode}`);
             await loadTeacherClasses();
         } catch (err: any) {
-            Alert.alert("Creation Failure", err.message || "Something went wrong creating the class. Please try again.");
+            showAlert("Creation Failure", err.message || "Something went wrong creating the class. Please try again.");
         } finally {
             setSubmitting(false);
         }
@@ -324,7 +326,7 @@ export default function ClassManagementHub() {
             setSelectedClass({ ...currentClass, is_anonymous_required: value });
             setClasses(prev => prev.map(c => c.id === currentClass.id ? { ...c, is_anonymous_required: value } : c));
         } catch {
-            Alert.alert("Sync Error", "Could not save that setting. Please try again.");
+            showAlert("Sync Error", "Could not save that setting. Please try again.");
         }
     }
 
@@ -354,13 +356,76 @@ export default function ClassManagementHub() {
                             // Locally pop item out of view array instantly
                             setRoster(prev => prev.filter(s => s.membership_id !== student.membership_id));
                         } catch (err: any) {
-                            Alert.alert("Error", "Could not remove that student. Please try again.");
+                            showAlert("Error", "Could not remove that student. Please try again.");
                         }
                     }
                 }
             ]
         );
     };
+
+    // Renders one roster row for the FlatList below. Pulled out of the
+    // JSX into its own useCallback (rather than an inline .map()) so the
+    // list can actually virtualize -- with a full course load (100+
+    // students), rendering every row up front regardless of what's
+    // on-screen was a real, unmitigated performance risk on lower-end
+    // Chromebooks. Found by an /impeccable audit.
+    const renderRosterItem = useCallback(({ item: student }: { item: StudentProfile }) => (
+        <View style={[styles.rosterCardRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+                <Text style={[styles.rosterRealName, { color: theme.text }]}>{student.display_name}</Text>
+                <Text style={[styles.rosterNickname, { color: theme.subtext }]}>Handle: @{student.username}</Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={[styles.rosterMilesValue, { color: theme.accent }]}>
+                        {formatMiles(student.total_miles_walked)}
+                    </Text>
+                    <Text style={styles.rosterMilesUnit}>mi total</Text>
+                </View>
+                <View style={{ alignItems: 'flex-end' }}>
+                    {/* An "Immediately Invoked Function Expression" (IIFE)
+                        — `(() => { ... })()` — used here purely to let a
+                        local variable (`p`) be computed and reused across
+                        multiple lines of JSX below, since JSX expressions
+                        can't normally contain multi-statement logic like a
+                        `const` declaration directly inline. */}
+                    {(() => {
+                        const p = quizParticipation.get(student.id);
+                        return (
+                            <>
+                                {/* Shows "correct/attempted" (e.g. "7/10")
+                                    if this student has quiz data, or an
+                                    em-dash "—" placeholder if they haven't
+                                    attempted any quizzes yet. Labeled
+                                    explicitly as "correct" (not just
+                                    "quizzes") since a student can complete
+                                    every assigned question and still have
+                                    gotten some of them wrong. */}
+                                <Text style={[styles.rosterMilesValue, { color: theme.text, fontSize: 15 }]}>
+                                    {p ? `${p.correct}/${p.total}` : '—'}
+                                </Text>
+                                <Text style={styles.rosterMilesUnit}>correct</Text>
+                            </>
+                        );
+                    })()}
+                </View>
+                <Pressable
+                    onPress={() => handleRemoveStudent(student)}
+                    style={styles.removeCircleButton}
+                    // The icon + padding only add up to roughly a 26x26 tappable
+                    // area — too small for a destructive "remove student" action.
+                    // hitSlop extends the touch target without changing the visible
+                    // circle, closer to the ~44x44 minimum recommended target size.
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${student.display_name || student.username} from this class`}
+                >
+                    <Ionicons name="trash-outline" size={18} color={theme.error} />
+                </Pressable>
+            </View>
+        </View>
+    ), [theme, quizParticipation, handleRemoveStudent]);
 
     if (loading) {
         return (
@@ -396,115 +461,68 @@ export default function ClassManagementHub() {
                     strip. */}
                 <View style={{ flex: 1 }}>
                 <EdgeSwipeBack onSwipeBack={() => { setSelectedClass(null); setRoster([]); }} />
-                <ScrollView
+                {/* FlatList instead of a ScrollView + .map() -- with a full
+                    course load (100+ students) this is a real virtualized
+                    list now (only the rows actually on screen get mounted)
+                    rather than rendering the entire roster up front. The
+                    class hero card + section title move into
+                    ListHeaderComponent so they still scroll away with the
+                    roster, matching the original layout exactly; the
+                    loading spinner / "no students" message move into
+                    ListEmptyComponent, since `roster` is always `[]` while
+                    rosterLoading is true (see loadRoster above) so exactly
+                    one of the two ever needs to render. Found by an
+                    /impeccable audit. */}
+                <FlatList
                     style={[styles.container, { backgroundColor: theme.background }]}
                     contentContainerStyle={{ padding: 24, paddingBottom: 40 }}
-                >
-                <View style={[styles.classHeroCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                    <Text style={[styles.heroClassName, { color: theme.text }]}>{selectedClass.class_name}</Text>
-                    <Text style={styles.heroJoinCodeLabel}>
-                        STUDENT JOIN CODE: <Text style={{ color: theme.accent, fontWeight: '800' }}>{selectedClass.id}</Text>
-                    </Text>
+                    data={roster}
+                    keyExtractor={(student) => String(student.membership_id)}
+                    renderItem={renderRosterItem}
+                    ListHeaderComponent={
+                        <>
+                            <View style={[styles.classHeroCard, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+                                <Text style={[styles.heroClassName, { color: theme.text }]}>{selectedClass.class_name}</Text>
+                                <Text style={styles.heroJoinCodeLabel}>
+                                    STUDENT JOIN CODE: <Text style={{ color: theme.accent, fontWeight: '800' }}>{selectedClass.id}</Text>
+                                </Text>
 
-                    <View style={[styles.divider, { backgroundColor: theme.border }]} />
+                                <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
-                    <View style={styles.toggleSettingRow}>
-                        <View style={{ flex: 1, paddingRight: 12 }}>
-                            <Text style={[styles.toggleSettingTitle, { color: theme.text }]}>Enforce Anonymous Nicknames</Text>
-                            <Text style={styles.toggleSettingSub}>
-                                Automatically hides real names on school leaderboards, replacing profiles with safe generated animal handles if desired.
-                            </Text>
-                        </View>
-                        <Switch
-                            value={selectedClass.is_anonymous_required}
-                            onValueChange={(val) => void toggleAnonymityRule(selectedClass, val)}
-                            // trackColor customizes the color of the
-                            // switch's background "track" for its two
-                            // states: light gray when off, the app's
-                            // accent color when on (the little circular
-                            // "thumb" itself uses the platform default
-                            // look, unstyled here).
-                            trackColor={{ false: '#D1D1D6', true: theme.accent }}
-                        />
-                    </View>
-                </View>
-
-                <Text style={[styles.sectionTitle, { color: theme.text }]} accessibilityRole="header">Enrolled Students ({roster.length})</Text>
-
-                {rosterLoading ? (
-                    <ActivityIndicator size="small" color={theme.accent} style={{ marginTop: 20 }} />
-                ) : roster.length === 0 ? (
-                    <View style={styles.emptyContainer}>
-                        <Text style={[styles.emptyText, { color: theme.subtext }]}>No students have entered this join code yet.</Text>
-                    </View>
-                ) : (
-                    <View style={{ marginBottom: 40 }}>
-                        {roster.map((student) => (
-                            <View key={student.membership_id} style={[styles.rosterCardRow, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-                                <View style={{ flex: 1, paddingRight: 8 }}>
-                                    <Text style={[styles.rosterRealName, { color: theme.text }]}>{student.display_name}</Text>
-                                    <Text style={[styles.rosterNickname, { color: theme.subtext }]}>Handle: @{student.username}</Text>
-                                </View>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-                                    <View style={{ alignItems: 'flex-end' }}>
-                                        <Text style={[styles.rosterMilesValue, { color: theme.accent }]}>
-                                            {formatMiles(student.total_miles_walked)}
+                                <View style={styles.toggleSettingRow}>
+                                    <View style={{ flex: 1, paddingRight: 12 }}>
+                                        <Text style={[styles.toggleSettingTitle, { color: theme.text }]}>Enforce Anonymous Nicknames</Text>
+                                        <Text style={styles.toggleSettingSub}>
+                                            Automatically hides real names on school leaderboards, replacing profiles with safe generated animal handles if desired.
                                         </Text>
-                                        <Text style={styles.rosterMilesUnit}>mi total</Text>
                                     </View>
-                                    <View style={{ alignItems: 'flex-end' }}>
-                                        {/* An "Immediately Invoked Function
-                                            Expression" (IIFE) — `(() => {
-                                            ... })()` — used here purely to
-                                            let a local variable (`p`) be
-                                            computed and reused across
-                                            multiple lines of JSX below,
-                                            since JSX expressions can't
-                                            normally contain multi-statement
-                                            logic like a `const` declaration
-                                            directly inline. */}
-                                        {(() => {
-                                            const p = quizParticipation.get(student.id);
-                                            return (
-                                                <>
-                                                    {/* Shows "correct/attempted"
-                                                        (e.g. "7/10") if this
-                                                        student has quiz
-                                                        data, or an em-dash
-                                                        "—" placeholder if
-                                                        they haven't
-                                                        attempted any quizzes
-                                                        yet. Labeled
-                                                        explicitly as
-                                                        "correct" (not just
-                                                        "quizzes") since a
-                                                        student can complete
-                                                        every assigned
-                                                        question and still
-                                                        have gotten some of
-                                                        them wrong. */}
-                                                    <Text style={[styles.rosterMilesValue, { color: theme.text, fontSize: 15 }]}>
-                                                        {p ? `${p.correct}/${p.total}` : '—'}
-                                                    </Text>
-                                                    <Text style={styles.rosterMilesUnit}>correct</Text>
-                                                </>
-                                            );
-                                        })()}
-                                    </View>
-                                    <Pressable
-                                        onPress={() => handleRemoveStudent(student)}
-                                        style={styles.removeCircleButton}
-                                        accessibilityRole="button"
-                                        accessibilityLabel={`Remove ${student.display_name || student.username} from this class`}
-                                    >
-                                        <Ionicons name="trash-outline" size={18} color={theme.error} />
-                                    </Pressable>
+                                    <Switch
+                                        value={selectedClass.is_anonymous_required}
+                                        onValueChange={(val) => void toggleAnonymityRule(selectedClass, val)}
+                                        // trackColor customizes the color of the
+                                        // switch's background "track" for its two
+                                        // states: light gray when off, the app's
+                                        // accent color when on (the little circular
+                                        // "thumb" itself uses the platform default
+                                        // look, unstyled here).
+                                        trackColor={{ false: '#D1D1D6', true: theme.accent }}
+                                    />
                                 </View>
                             </View>
-                        ))}
-                    </View>
-                )}
-                </ScrollView>
+
+                            <Text style={[styles.sectionTitle, { color: theme.text }]} accessibilityRole="header">Enrolled Students ({roster.length})</Text>
+                        </>
+                    }
+                    ListEmptyComponent={
+                        rosterLoading ? (
+                            <ActivityIndicator size="small" color={theme.accent} style={{ marginTop: 20 }} />
+                        ) : (
+                            <View style={styles.emptyContainer}>
+                                <Text style={[styles.emptyText, { color: theme.subtext }]}>No students have entered this join code yet.</Text>
+                            </View>
+                        )
+                    }
+                />
                 </View>
             </SafeAreaView>
         );

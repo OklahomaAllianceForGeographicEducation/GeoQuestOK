@@ -14,13 +14,25 @@ import { Link, Stack } from 'expo-router';
 // "StyleSheet" is React Native's way of defining CSS-like style objects.
 // "View" is the most basic layout container in React Native — the rough
 // equivalent of a <div> on the web.
-import { StyleSheet, View } from 'react-native';
+// "useColorScheme" reports whether the OS/browser is currently in light or
+// dark mode, so this screen can follow the same theme system every other
+// screen in the app uses instead of a hardcoded dark background.
+import { StyleSheet, View, useColorScheme } from 'react-native';
+
+// Shared theme tokens (light/dark) used across the whole app.
+import { colors } from '../commonStyles';
 
 // This is the component React Native/Expo Router will render for any
 // unmatched route. "export default" means this is the main (and only)
 // thing this file exports, which is required for Expo Router to treat it
 // as a screen.
 export default function NotFoundScreen() {
+    // Same pattern used everywhere else in the app: fall back to 'light'
+    // if the OS/browser doesn't report a preference, then look up that
+    // scheme's token values.
+    const scheme = useColorScheme() ?? 'light';
+    const theme = colors[scheme];
+
     // A component's "return" describes what should appear on screen (this
     // is JSX — HTML-like syntax that compiles down to React function calls).
     return (
@@ -36,14 +48,15 @@ export default function NotFoundScreen() {
 
             {/* This View is the main visible container for the screen.
                 Its look (background color, centering, etc.) comes from
-                styles.container below. */}
-            <View style={styles.container}>
+                styles.container below, plus the theme-driven background
+                color applied inline here. */}
+            <View style={[styles.container, { backgroundColor: theme.background }]}>
                 {/* Tapping this Link sends the user back to the root route
                     ("/"), which in this app is app/index.tsx. The text
                     between the tags ("Back to Home Screen") is what the
                     user sees and taps on. style={styles.button} controls
                     how that text looks (size, underline, color). */}
-                <Link href="/" style={styles.button}>
+                <Link href="/" style={[styles.button, { color: theme.text }]}>
                     Back to Home Screen
                 </Link>
             </View>
@@ -62,10 +75,6 @@ const styles = StyleSheet.create({
         // Since this is the top-level View on the screen, flex: 1 makes it
         // take up the entire screen (100% width and height).
         flex: 1,
-        // Hex color for the background. "#25292e" is a dark charcoal/near-
-        // black gray. The 6 digits are RR-GG-BB (red, green, blue) in hex —
-        // increasing any pair brightens that color channel.
-        backgroundColor: '#25292e',
         // justifyContent controls alignment along the main axis. By default
         // a View's main axis is vertical (column), so 'center' vertically
         // centers the children (the Link) in the middle of the screen.
@@ -85,8 +94,8 @@ const styles = StyleSheet.create({
         // Draws a line underneath the text, mimicking a classic web
         // hyperlink so users recognize it's tappable.
         textDecorationLine: 'underline',
-        // White text color, so it's visible against the dark
-        // backgroundColor set on container above.
-        color: '#fff',
+        // Color now comes from theme.text (applied inline above) instead
+        // of a hardcoded white, so it stays legible against theme.background
+        // in both light and dark mode rather than assuming a dark screen.
     },
 });

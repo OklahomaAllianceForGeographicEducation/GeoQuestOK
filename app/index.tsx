@@ -15,7 +15,6 @@ import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     KeyboardAvoidingView,
     // These two are TypeScript types describing the shape of the event
     // object React Native's ScrollView gives us on every scroll tick —
@@ -35,6 +34,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../commonStyles';
 import { supabase } from '../utils/supabase';
+import { resolveAppShellPath } from '../lib/access';
+import { showAlert } from '../lib/confirmAlert';
+import { Sentry } from '../lib/sentry';
 
 // The content for the three onboarding carousel slides, defined as a plain
 // array of objects so the render code below can simply .map() over it
@@ -126,7 +128,7 @@ export default function LaunchIntroductionScreen() {
         // .trim() strips whitespace so a field containing only spaces
         // still counts as "empty."
         if (!email.trim() || !password.trim()) {
-            Alert.alert("Missing Fields", "Please populate both fields to sign into your trail account.");
+            showAlert("Missing Fields", "Please populate both fields to sign into your trail account.");
             return;
         }
 
@@ -144,23 +146,27 @@ export default function LaunchIntroductionScreen() {
                 if (authError) throw authError;
 
                 if (authData?.session?.user) {
-                    // Fetch the user profile to look up their assigned role
+                    // Fetch the user profile to look up their assigned role.
+                    // Routed through the same resolveAppShellPath() helper
+                    // login.tsx uses -- this form used to hand-roll its own
+                    // role branching that only special-cased 'student' and
+                    // 'okage' and sent every other role (including 'admin'
+                    // and 'site_admin', which each have their own dedicated
+                    // shell) to '/(teacher-tabs)'. That branching also raced
+                    // app/_layout.tsx's own onAuthStateChange-driven
+                    // redirect on the same signInWithPassword() call;
+                    // reusing the shared resolver means both redirects now
+                    // converge on the same destination regardless of which
+                    // one wins the race. Found by an /impeccable audit.
                     const { data: profile, error: profileError } = await supabase
                         .from('profiles')
-                        .select('app_role')
+                        .select('app_role, active_view')
                         .eq('id', authData.session.user.id)
-                        .single();
+                        .maybeSingle();
 
                     if (profileError) throw profileError;
 
-                    // Route based on the database role matching your type definitions
-                    if (profile?.app_role === 'student') {
-                        router.replace('/dashboard'); // Replace with your exact student route
-                    } else if (profile?.app_role === 'okage') {
-                        router.replace('/(okage-tabs)' as any);
-                    } else {
-                        router.replace('/(teacher-tabs)');
-                    }
+                    router.replace(resolveAppShellPath(profile) as any);
                 }
             };
 
@@ -175,13 +181,14 @@ export default function LaunchIntroductionScreen() {
 
             await Promise.race([performLogin(), timeoutPromise]);
         } catch (err: any) {
+            Sentry.captureException(err);
             if (err.message === 'TIMEOUT') {
-                Alert.alert(
+                showAlert(
                     "Login Timed Out",
                     "This is taking longer than expected. Check your internet connection (try switching between Wi-Fi and cellular data) and try again."
                 );
             } else {
-                Alert.alert("Sign In Failed", err.message);
+                showAlert("Sign In Failed", err.message);
             }
         } finally {
             setLoading(false);
@@ -324,7 +331,11 @@ export default function LaunchIntroductionScreen() {
                     <View style={styles.formContainer}>
                         <View style={styles.formHeaderRow}>
                             <Text style={[styles.formTitle, { color: theme.text }]}>Enter Account Information</Text>
-                            <Pressable style={{ paddingVertical: 4 }} onPress={() => setIsFormVisible(false)}>
+                            <Pressable
+                                style={{ paddingVertical: 14, marginVertical: -10 }}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                                onPress={() => setIsFormVisible(false)}
+                            >
                                 <Text style={{ color: theme.accent, fontSize: 13, fontWeight: '700' }}>Back to Info</Text>
                             </Pressable>
                         </View>
@@ -332,6 +343,7 @@ export default function LaunchIntroductionScreen() {
                         <Text style={[styles.fieldLabel, { color: theme.subtext }]}>EMAIL</Text>
                         <TextInput
                             style={[styles.textInput, { borderColor: theme.border, backgroundColor: theme.background, color: theme.text }]}
+                            accessibilityLabel="Email"
                             placeholder="Email"
                             placeholderTextColor={theme.subtext}
                             keyboardType="email-address"
@@ -346,6 +358,7 @@ export default function LaunchIntroductionScreen() {
                         <Text style={[styles.fieldLabel, { color: theme.subtext, marginTop: 12 }]}>PASSWORD</Text>
                         <TextInput
                             style={[styles.textInput, { borderColor: theme.border, backgroundColor: theme.background, color: theme.text }]}
+                            accessibilityLabel="Password"
                             placeholder="Password"
                             placeholderTextColor={theme.subtext}
                             secureTextEntry

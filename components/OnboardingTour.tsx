@@ -57,6 +57,23 @@ const SPOTLIGHT_PADDING = 6;
 // settle, short enough not to make the tour feel laggy.
 const SCROLL_SETTLE_MS = 300;
 
+// OnboardingTour
+// The exported component itself. See the file-level comment above for the
+// overall design (first-run guided tour, floating cards vs. spotlight
+// steps). One instance of this should be mounted per role-based app shell.
+// Props:
+// - tourId: which tour definition (from lib/onboarding.ts's TOURS map) this
+//   instance shows -- also used as the storage key for "has this been
+//   seen" and as the channel for manual replay requests.
+// - active: whether this viewer is really a member of this tour's
+//   audience. Defaults to true.
+// - ready: whether the caller's own eligibility check (e.g. an
+//   active_view preview check) has resolved yet. Defaults to true.
+// - onDismiss: optional callback fired whenever the tour ends (finished or
+//   skipped).
+// Returns: a React Native <Modal> containing either a FloatingCard or a
+// SpotlightOverlay for the current step, or null while the tour isn't
+// active/visible.
 export default function OnboardingTour({ tourId, active = true, ready = true, onDismiss }: OnboardingTourProps) {
     const scheme = useColorScheme() ?? 'light';
     const theme = colors[scheme];
@@ -66,7 +83,12 @@ export default function OnboardingTour({ tourId, active = true, ready = true, on
     const { width: screenW, height: screenH } = useWindowDimensions();
     const tour = TOURS[tourId];
 
+    // visible: whether the tour's Modal is currently shown. Starts false;
+    // flipped true either by the first-run effect below (tour hasn't been
+    // seen yet) or by a manual "Replay Tour" request.
     const [visible, setVisible] = useState(false);
+    // stepIndex: which step of `tour.steps` is currently being shown.
+    // Advances via `advance()`/onNext, or moves back via onBack.
     const [stepIndex, setStepIndex] = useState(0);
     // null while there's no target to show (card steps), or while a
     // spotlight step's target hasn't been located yet.
@@ -76,6 +98,9 @@ export default function OnboardingTour({ tourId, active = true, ready = true, on
     // stuck on an invisible overlay.
     const [targetMissing, setTargetMissing] = useState(false);
 
+    // step: the current step's full definition (title, body, icon, and
+    // optionally targetKey/route for a spotlight step), looked up fresh
+    // every render from `tour.steps[stepIndex]`.
     const step = tour.steps[stepIndex];
 
     // First-run: show automatically the first time this device hasn't
@@ -175,17 +200,33 @@ export default function OnboardingTour({ tourId, active = true, ready = true, on
         // re-measures after an orientation change or a resized web window.
     }, [visible, stepIndex, step.targetKey, step.route, screenW, screenH]);
 
+    // finish
+    // Ends the tour: hides the Modal, persists to storage (via
+    // markTourSeen) that this tour/version has been seen so it won't
+    // auto-show again on future launches, and notifies the parent screen
+    // via the optional onDismiss callback. Called both when the student
+    // reaches the last step's "Let's go" button and when they tap "Skip".
     const finish = () => {
         setVisible(false);
         markTourSeen(tour.id, tour.version);
         onDismiss?.();
     };
 
+    // Nothing to render while the tour isn't active -- returning null here
+    // (rather than always rendering the Modal with visible={false}) avoids
+    // doing any of the target-locating work in the effect above when the
+    // tour isn't actually showing.
     if (!visible) return null;
 
+    // isFirst/isLast: whether the current step is the first/last in this
+    // tour -- used to hide the "Back" link on step 1, and to change the
+    // "Next" button's label to "Let's go" on the final step.
     const isFirst = stepIndex === 0;
     const isLast = stepIndex === tour.steps.length - 1;
     const nextLabel = isLast ? "Let's go" : 'Next';
+    // advance
+    // Handler for the "Next"/"Let's go" button: moves to the next step, or
+    // calls finish() if this was already the last step.
     const advance = () => (isLast ? finish() : setStepIndex((i) => i + 1));
 
     // A spotlight step renders the dim-and-point overlay once its target
@@ -213,6 +254,13 @@ export default function OnboardingTour({ tourId, active = true, ready = true, on
                     onBack={() => setStepIndex((i) => Math.max(0, i - 1))}
                     onNext={advance}
                     onSkip={finish}
+                    // Remounts SpotlightOverlay on every step change, which
+                    // resets its internal measuredHeight state back to null
+                    // -- each step's content gets its own fresh
+                    // height measurement rather than carrying over the
+                    // previous step's, which could otherwise (briefly) mis
+                    // -position a step with very different content length.
+                    key={stepIndex}
                 />
             ) : (
                 <FloatingCard
@@ -244,6 +292,16 @@ type StepChromeProps = {
     onSkip: () => void;
 };
 
+// StepDots
+// Small internal presentational helper: renders the row of progress dots
+// shown at the bottom of every tour card/tooltip (one dot per step, with
+// the active step's dot wider and colored differently).
+// Props:
+// - count: total number of steps in the tour (how many dots to render).
+// - activeIndex: which dot should be styled as "active" (the current step).
+// - color: fill color for the active dot.
+// - inactiveColor: fill color for every other dot.
+// Returns: a row of small circular Views, one per step.
 function StepDots({ count, activeIndex, color, inactiveColor }: { count: number; activeIndex: number; color: string; inactiveColor: string }) {
     return (
         <View style={styles.dots}>
@@ -325,6 +383,18 @@ function SpotlightOverlay({
     onNext,
     onSkip,
 }: StepChromeProps & { rect: TargetRect; screenW: number; screenH: number; insets: { top: number; bottom: number } }) {
+    // Real height of this step's tooltip, captured via onLayout below once
+    // it's actually rendered. Falls back to ESTIMATED_TOOLTIP_HEIGHT only
+    // for the very first layout pass, before a real measurement exists --
+    // that static guess was previously the ONLY input to the above/below
+    // decision, and measured 33% too short against this tour's own longest
+    // real step (289px actual vs. 220px estimated), confirmed live. A
+    // target positioned further from the screen edge than this step's
+    // happened to be would have let the tooltip run off the bottom of the
+    // viewport instead of flipping above it.
+    const [measuredHeight, setMeasuredHeight] = useState<number | null>(null);
+    const tooltipHeightForPlacement = measuredHeight ?? ESTIMATED_TOOLTIP_HEIGHT;
+
     const holeLeft = Math.max(0, rect.x - SPOTLIGHT_PADDING);
     const holeTop = Math.max(0, rect.y - SPOTLIGHT_PADDING);
     const holeWidth = Math.min(screenW - holeLeft, rect.width + SPOTLIGHT_PADDING * 2);
@@ -338,7 +408,7 @@ function SpotlightOverlay({
     const tooltipWidth = Math.min(340, screenW - 32);
     const spaceBelow = screenH - holeBottom;
     const spaceAbove = holeTop;
-    const placeBelow = spaceBelow >= ESTIMATED_TOOLTIP_HEIGHT + 16 || spaceBelow >= spaceAbove;
+    const placeBelow = spaceBelow >= tooltipHeightForPlacement + 16 || spaceBelow >= spaceAbove;
     const gap = 14;
 
     const tooltipLeft = Math.min(Math.max(16, holeLeft + holeWidth / 2 - tooltipWidth / 2), screenW - 16 - tooltipWidth);
@@ -418,7 +488,10 @@ function SpotlightOverlay({
                 }
             />
 
-            <View style={[styles.tooltip, tooltipStyle, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}>
+            <View
+                style={[styles.tooltip, tooltipStyle, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}
+                onLayout={(e) => setMeasuredHeight(e.nativeEvent.layout.height)}
+            >
                 <View style={styles.tooltipTopRow}>
                     <Text style={[styles.tooltipStepCount, { color: theme.subtext }]}>
                         Step {stepIndex + 1} of {stepCount}
@@ -446,6 +519,7 @@ function SpotlightOverlay({
 }
 
 const styles = StyleSheet.create({
+    // -- FloatingCard layout styles --
     floatingCardWrap: {
         flex: 1,
         alignItems: 'center',
@@ -464,6 +538,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
     },
+    // -- step progress dot styles (StepDots) --
     dots: {
         flexDirection: 'row',
         justifyContent: 'center',
@@ -479,6 +554,7 @@ const styles = StyleSheet.create({
     dotActive: {
         width: 20,
     },
+    // -- "Back" link styles --
     backLink: {
         alignSelf: 'center',
         paddingVertical: 4,
@@ -488,6 +564,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
     },
+    // -- SpotlightOverlay scrim/ring styles --
     scrimPanel: {
         position: 'absolute',
     },
@@ -499,6 +576,7 @@ const styles = StyleSheet.create({
         shadowRadius: 10,
         elevation: 6,
     },
+    // -- tooltip/card body styles (shared by FloatingCard and SpotlightOverlay) --
     tooltip: {
         position: 'absolute',
         borderRadius: 20,

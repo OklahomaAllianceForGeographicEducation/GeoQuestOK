@@ -14,5 +14,13 @@
     "**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    // Supabase Edge Functions run on Deno, not Node/React Native -- they
+    // use Deno-only globals (Deno.serve, Deno.env) and jsr:/npm: module
+    // specifiers this app's own tsc/Metro setup doesn't (and shouldn't)
+    // understand. Deno type-checks these itself at deploy time.
+    "supabase/functions/**/*"
   ]
 }

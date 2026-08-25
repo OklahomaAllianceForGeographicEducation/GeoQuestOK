@@ -9,6 +9,7 @@ import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, 
 import { colors, Theme } from '../../commonStyles';
 import { signOutAndRedirect } from '../../lib/auth';
 import { confirmAlert } from '../../lib/confirmAlert';
+import { confirmDeleteAccount } from '../../lib/deleteAccount';
 import { requestTourReplay } from '../../lib/onboarding';
 import { supabase } from '../../utils/supabase';
 
@@ -49,6 +50,7 @@ export default function OkageAccountScreen() {
     const [userId, setUserId] = useState<string | null>(null);
     // The profile data as last loaded/saved from the database.
     const [profile, setProfile] = useState<Profile | null>(null);
+    const [deletingAccount, setDeletingAccount] = useState(false);
     // The text currently in the "Your Name" input box — kept separate from
     // `profile.display_name` so the user can edit freely without every
     // keystroke being treated as "saved."
@@ -269,6 +271,23 @@ export default function OkageAccountScreen() {
                     accessibilityRole="button"
                 >
                     <Text style={{ color: theme.error, fontWeight: '600', fontSize: 14 }}>Sign Out Account</Text>
+                </Pressable>
+
+                {/* Deliberately understated relative to Sign Out --
+                    permanent and wipes everything, so it shouldn't be one
+                    careless tap away from anything else here. The
+                    confirmation dialog carries the actual warning. */}
+                <Pressable
+                    onPress={() => confirmDeleteAccount(router, setDeletingAccount)}
+                    disabled={deletingAccount}
+                    style={{ alignSelf: 'center', marginTop: 20, paddingVertical: 13, paddingHorizontal: 18 }}
+                    accessibilityRole="button"
+                >
+                    {deletingAccount ? (
+                        <ActivityIndicator color={theme.subtext} size="small" />
+                    ) : (
+                        <Text style={{ color: theme.subtext, fontWeight: '600', fontSize: 13, textDecorationLine: 'underline' }}>Delete Account</Text>
+                    )}
                 </Pressable>
             </ScrollView>
         </View>

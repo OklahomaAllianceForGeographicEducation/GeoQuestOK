@@ -31,7 +31,9 @@ import { useRouter, Link } from 'expo-router';
 // earlier — the app has two near-duplicate Button components).
 import Button from '../components/Button';
 import WebContainer from '../components/WebContainer';
+import PartnershipAcknowledgement from '../components/PartnershipAcknowledgement';
 import { colors, Theme } from '../commonStyles';
+import { resolveAppShellPath } from '../lib/access';
 
 export default function ResetPassword() {
     const scheme = useColorScheme() ?? 'light';
@@ -127,10 +129,27 @@ export default function ResetPassword() {
             );
         } else {
             showAlert("Success", "Password updated! Logging you in...");
-            // Send the user to the root route. Since they now have a valid
-            // session, app/_layout.tsx's auth listener will pick that up
-            // and redirect them further to the correct role-based screen.
-            router.replace('/');
+            // Resolve the destination directly rather than sending the user
+            // to '/' and hoping app/_layout.tsx's auth listener redirects
+            // them onward: updateUser() fires a USER_UPDATED auth event,
+            // which _layout.tsx's listener deliberately does NOT act on (it
+            // only redirects on SIGNED_IN/SIGNED_OUT/INITIAL_SESSION/
+            // PASSWORD_RECOVERY) -- so '/' would have stranded a signed-in
+            // user on a non-session-aware screen (index.web.tsx's static
+            // marketing homepage on web, the onboarding carousel on
+            // native), the same class of bug login.tsx's redirect already
+            // fixed once. Found by an /impeccable audit.
+            const { data: { user } } = await supabase.auth.getUser();
+            let shellPath: ReturnType<typeof resolveAppShellPath> = '/(tabs)/dashboard';
+            if (user) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('app_role, active_view')
+                    .eq('id', user.id)
+                    .maybeSingle();
+                shellPath = resolveAppShellPath(profile);
+            }
+            router.replace(shellPath);
         }
 
         // Whether it succeeded or failed, we're done loading — reset the
@@ -145,6 +164,7 @@ export default function ResetPassword() {
                 <Text style={styles.fieldLabel}>New password</Text>
                 <TextInput
                     style={styles.input}
+                    accessibilityLabel="New password"
                     // Grey placeholder text shown when the field is empty.
                     placeholder="New Password"
                     placeholderTextColor={theme.subtext}
@@ -167,6 +187,7 @@ export default function ResetPassword() {
                 <Text style={styles.fieldLabel}>Confirm password</Text>
                 <TextInput
                     style={styles.input}
+                    accessibilityLabel="Confirm password"
                     placeholder="Re-enter New Password"
                     placeholderTextColor={theme.subtext}
                     secureTextEntry
@@ -176,7 +197,7 @@ export default function ResetPassword() {
                     autoComplete="new-password"
                 />
 
-                {formError && <Text style={styles.formError}>{formError}</Text>}
+                {formError && <Text style={styles.formError} accessibilityLiveRegion="assertive" role="alert">{formError}</Text>}
 
                 <Button
                     // The label text swaps to "Updating..." while the request
@@ -199,12 +220,7 @@ export default function ResetPassword() {
                     the student/teacher account screens -- see login.tsx
                     for why this belongs on every auth screen, not just
                     signup. */}
-                <Text style={styles.acknowledgementText}>
-                    The GeoQuestOK app is a partnership between the Oklahoma State Department of Education’s
-                    Health & Physical Education Department and the Oklahoma Alliance for Geographic Education.
-                    This program works to fulfill the “Walk Across Oklahoma” foundation created by Oklahoma House
-                    Bill 1647.
-                </Text>
+                <PartnershipAcknowledgement style={styles.acknowledgementText} />
             </WebContainer>
         </View>
     );

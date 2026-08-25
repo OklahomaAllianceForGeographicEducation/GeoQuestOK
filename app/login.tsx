@@ -22,7 +22,9 @@ import * as Linking from 'expo-linking';
 
 import Button from '../components/Button';
 import WebContainer from '../components/WebContainer';
+import PartnershipAcknowledgement from '../components/PartnershipAcknowledgement';
 import { colors, Theme } from '../commonStyles';
+import { Sentry } from '../lib/sentry';
 
 // A helper (defined in lib/profiles.ts) that makes sure a "profiles"
 // table row exists for a given user — creating one if it's missing. Used
@@ -73,7 +75,6 @@ export default function Login() {
     // Submit credentials to Supabase and route the user into the app.
     async function signInWithEmail() {
         console.log("--- Login Attempt Started ---");
-        console.log("Target Email:", email);
 
         // .trim() strips leading/trailing whitespace so a stray space
         // doesn't count as "something was typed". Password isn't trimmed
@@ -198,6 +199,7 @@ export default function Login() {
             }
         } catch (err: any) {
             console.error("Unexpected Login Error Caught:", err);
+            Sentry.captureException(err);
             // Distinguish our custom 15-second timeout from any other kind
             // of unexpected error, so the user gets a more specific,
             // actionable message (check your connection) instead of a
@@ -260,6 +262,7 @@ export default function Login() {
 
             setFormNotice(`If an account exists for ${cleanEmail}, a password reset link is on its way.`);
         } catch (err: any) {
+            Sentry.captureException(err);
             setFormError(
                 err?.message === 'TIMEOUT'
                     ? "This is taking longer than expected. Check your internet connection and try again."
@@ -291,6 +294,7 @@ export default function Login() {
                 <Text style={styles.fieldLabel}>Email</Text>
                 <TextInput
                     style={styles.input}
+                    accessibilityLabel="Email"
                     placeholder="you@school.org"
                     placeholderTextColor={theme.subtext}
                     value={email}
@@ -311,6 +315,7 @@ export default function Login() {
                 <Text style={styles.fieldLabel}>Password</Text>
                 <TextInput
                     style={styles.input}
+                    accessibilityLabel="Password"
                     placeholder="Password"
                     placeholderTextColor={theme.subtext}
                     value={password}
@@ -325,6 +330,7 @@ export default function Login() {
                     onPress={handleForgotPassword}
                     accessibilityRole="button"
                     accessibilityLabel="Forgot password?"
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                     style={{ alignSelf: 'flex-end', marginTop: -6, marginBottom: 18 }}
                 >
                     <Text style={styles.forgotPasswordText}>
@@ -336,8 +342,8 @@ export default function Login() {
                     alert() — visible without breaking the screen's own
                     look, and it stays put so the user can re-read it
                     while fixing the fields below. */}
-                {formError && <Text style={styles.formError}>{formError}</Text>}
-                {formNotice && <Text style={styles.formNotice}>{formNotice}</Text>}
+                {formError && <Text style={styles.formError} accessibilityLiveRegion="assertive" role="alert">{formError}</Text>}
+                {formNotice && <Text style={styles.formNotice} accessibilityLiveRegion="assertive" role="alert">{formNotice}</Text>}
 
                 <Button
                     label={loading ? "Logging in..." : "Login"}
@@ -366,12 +372,7 @@ export default function Login() {
                     moments a wary parent or teacher is most likely to
                     double-check this is legitimate, and it previously
                     carried none of that trust signal. */}
-                <Text style={styles.acknowledgementText}>
-                    The GeoQuestOK app is a partnership between the Oklahoma State Department of Education’s
-                    Health & Physical Education Department and the Oklahoma Alliance for Geographic Education.
-                    This program works to fulfill the “Walk Across Oklahoma” foundation created by Oklahoma House
-                    Bill 1647.
-                </Text>
+                <PartnershipAcknowledgement style={styles.acknowledgementText} />
             </WebContainer>
         </KeyboardAvoidingView>
     );

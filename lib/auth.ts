@@ -39,6 +39,40 @@
 // could ever write a session back in.
 import { supabase } from '../utils/supabase';
 
+/**
+ * Signs the current user out and sends them back to the root/login screen.
+ * This is the ONLY sign-out path every account screen should use -- see the
+ * long file-level comment above for exactly why the ordering here (stop
+ * timer -> clear local session -> navigate -> revoke remotely in the
+ * background) matters and what breaks if it's reordered.
+ *
+ * @param router - An Expo Router-compatible router object; only its
+ *   `.replace(href)` method is used, to navigate to `'/'` (the app's
+ *   root/login redirect) without leaving the sign-out screen on the
+ *   navigation history stack (so pressing "back" afterward can't return to
+ *   an authenticated screen).
+ * @returns A Promise that resolves once the LOCAL sign-out step and the
+ *   `router.replace('/')` navigation have both completed. It does NOT wait
+ *   for the final background/global sign-out call -- that one is
+ *   intentionally fire-and-forget (see below).
+ *
+ * Side effects, in order:
+ *   1. `supabase.auth.stopAutoRefresh()` -- cancels the SDK's internal
+ *      timer that would otherwise silently refresh the access token in the
+ *      background. Wrapped in try/catch and only `console.warn`'d on
+ *      failure -- this step is best-effort and must never block sign-out.
+ *   2. `supabase.auth.signOut({ scope: 'local' })` -- clears the session
+ *      from on-device/browser storage (AsyncStorage/localStorage) WITHOUT
+ *      making a network call. Also wrapped in try/catch + `console.warn`;
+ *      even if this somehow throws, the function still navigates away.
+ *   3. `router.replace('/')` -- immediate navigation, not gated on step 4.
+ *   4. `supabase.auth.signOut()` (no scope, i.e. global) -- fired but NOT
+ *      awaited. This asks Supabase's Auth server to revoke the refresh
+ *      token so it can't be replayed later (e.g. if it had leaked). Its
+ *      resolution/rejection is only logged via `.catch(...)`, never thrown
+ *      to the caller, since by the time it settles the user has already
+ *      navigated away and the local session is already gone either way.
+ */
 export async function signOutAndRedirect(router: { replace: (href: any) => void }): Promise<void> {
     // Cancel any pending/scheduled token-refresh timer first -- see the
     // comment above for why this has to happen before local sign-out, not

@@ -3,5 +3,7 @@
   publish = "dist"
 
 [build.environment]
-  # Expo SDK 54 requires Node 20.19.4+
-  NODE_VERSION = "20"
+  # Node 22+ has a native WebSocket global, which @supabase/realtime-js needs
+  # during Expo's static web export (it runs in Node, not a browser, at build time).
+  # Expo SDK 54's minimum is Node 20.19.4, so 22 satisfies that too.
+  NODE_VERSION = "22"

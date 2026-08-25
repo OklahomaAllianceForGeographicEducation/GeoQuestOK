@@ -129,7 +129,7 @@ const FAQ_ITEMS = [
     {
         id: 'cost',
         question: 'Is GeoQuestOK free for my classroom?',
-        answer: "Yes. GeoQuestOK is a free program backed by the Oklahoma Alliance for Geographic Education and the Oklahoma State Department of Education — there's no cost to your school or district.",
+        answer: "Yes. GeoQuestOK is a free program backed by the Oklahoma Alliance for Geographic Education and the Oklahoma State Department of Education. There is never any cost to your school or district.",
     },
     {
         id: 'grades',
@@ -139,29 +139,61 @@ const FAQ_ITEMS = [
     {
         id: 'standards',
         question: 'Does it align with Oklahoma state standards?',
-        answer: 'Yes. Trails come with cross-curricular lesson guides tied to Oklahoma State Department of Education standards across PE, health, and social studies.',
+        answer: 'Yes. Trails come with cross-curricular lesson guides tied to Oklahoma State Department of Education standards across physical education, science, mathematics, english language arts, and social studies.',
     },
     {
         id: 'logging',
         question: 'How do students log their miles?',
-        answer: "From a pedometer, a smartwatch, or by entering distance manually — whatever's available in your classroom or at home.",
+        answer: "Students log their miles manually using distances calculated from a pedometer, smartwatch, or how many times they went around a track. GeoQuestOK does not directly connect to smartwatches or other automatic health tracking. ",
+    },
+    {
+        id: 'activities',
+        question: 'Can students log physical activity other than walking?',
+        answer: "Yes. Students can log walking, running, swimming, cycling, and dancing. They are also able to log any other physical activity as `other`",
     },
     {
         id: 'tracking',
         question: "Can I track my students' progress?",
-        answer: 'Yes. The Reports tab gives you per-student quiz grades, fitness results, and a day-by-day activity log, plus schoolwide and district-wide totals — all exportable to PDF.',
+        answer: 'Yes. The Reports tab gives you per-student quiz grades, fitness results, and a day-by-day activity log, plus schoolwide and district-wide totals.',
+    },
+    {
+        id: 'teacher-tracking',
+        question: "I want to participate alongside my students. Can I also log my walking distances?",
+        answer: 'Teachers can use GeoQuestOK alongside their students. Switch to `Classic Trail` view from your teacher account page to log miles the same way students do. To appear on your class leaderboard, join your own class using the same class code your students use to join.',
     },
     {
         id: 'not-a-teacher',
-        question: "I'm not a classroom teacher — can I still sign up?",
-        answer: 'Yes. Signup also supports school administrators, youth and scout group leaders, and higher-education instructors, each with their own setup path.',
+        question: "I'm not a classroom teacher. Can I still sign up?",
+        answer: 'Yes. Signup also supports school administrators, youth and scout group leaders, each with their own setup path.',
     },
+
+    {
+        id: 'number-students',
+        question: "How many students can I have in each class? How many classes can I have?",
+        answer: 'There is no limit to the number of classes you can create or the number of students enrolled in each one.',
+    },
+    {
+        id: 'more-than-one-school',
+        question: "What if I teach at more than one school?",
+        answer: 'The GeoQuestOK app will prompt you to select a primary school site upon account registration. However, you are able to change the school site that each individual class is associated with, allowing you to create classes at your secondary site.',
+    },
+    {
+        id: 'student-info',
+        question: "How is student information managed? Who has access to student data?",
+        answer: 'Minimal student information is collected by GeoQuestOK. All data is stored in a private database hosted by supabase. Teachers are able to view data only from students enrolled in their classes. Site administrators, such as principals, are able to view summarized activity data for each student in their school. This only includes the total distance walked and Presidential Physical Fitness Challenge compliance. District level administrators, such as superintendents, can view the total distance walked by each class and school in their district, but cannot see any individual student data. The Oklahoma Alliance for Geographic Education and the Oklahoma State Department of Education are able to view aggregate walking distances per school, but cannot see information from individual classes or students. For additional information, please view our privacy policy.',
+        linkLabel: 'View the GeoQuestOK privacy policy',
+        linkUrl: 'https://okageweb.org/',
+    },
+
+
+
+
     {
         id: 'about-okage',
         question: 'Who runs this program?',
         answer: 'GeoQuestOK is a project of the Oklahoma Alliance for Geographic Education (OKAGE), in partnership with the Oklahoma State Department of Education and the Oklahoma Historical Society.',
         linkLabel: 'Visit the OKAGE website',
-        linkUrl: 'https://okageweb.org/',
+        linkUrl: 'https://geoquestok.org/privacy-policy',
     },
 ];
 

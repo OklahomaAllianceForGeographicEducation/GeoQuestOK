@@ -36,8 +36,8 @@ const CONTACT_BOXES = [
         description: 'App bugs, account or login issues, and anything else related to using the GeoQuestOK app itself. App bugs or crashes are automatically logged and will be fixed as soon as possible.',
         linkLabel: '',
         linkUrl: '',
-        contactName: 'Noah Holderbaum',
-        email: 'holderbaum@ou.edu',
+        contactName: 'GeoQuestOK Technical Support Team',
+        email: 'support@geoquestok.org',
     },
 ];
 

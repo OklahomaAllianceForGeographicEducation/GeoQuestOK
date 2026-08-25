@@ -94,12 +94,12 @@ const FITNESS_BENCHMARKS: Record<'BOYS' | 'GIRLS', Record<number, Record<Exercis
 // The 6 selectable exercises shown in the dropdown, each with an emoji +
 // label combination for a friendlier look than plain text.
 const EXERCISE_OPTIONS: { key: ExerciseKey; label: string }[] = [
-    { key: 'curl_ups', label: '💪 Curl-Ups (1 Minute)' },
-    { key: 'plank', label: '⏱️ Plank Hold' },
-    { key: 'mile_run', label: '🏃 One Mile Run' },
-    { key: 'beep_test', label: '🔊 20m Beep Test' },
-    { key: 'push_ups', label: '🧱 Right-Angle Push-Ups' },
-    { key: 'pull_ups', label: '🦇 Pull-Ups' }
+    { key: 'curl_ups', label: 'Curl-Ups (1 Minute)' },
+    { key: 'plank', label: 'Plank Hold' },
+    { key: 'mile_run', label: 'One Mile Run' },
+    { key: 'beep_test', label: '20m Beep Test' },
+    { key: 'push_ups', label: 'Right-Angle Push-Ups' },
+    { key: 'pull_ups', label: 'Pull-Ups' }
 ];
 
 export default function AdvancedStudentJournal() {

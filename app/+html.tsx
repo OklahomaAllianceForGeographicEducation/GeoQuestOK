@@ -13,6 +13,15 @@ export default function Root({ children }: { children: React.ReactNode }) {
                 <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
                 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
 
+                {/* Expo Router's static web export doesn't inject app.json's
+                    "name" as a <title> automatically -- it has to be set
+                    explicitly here, or the browser tab shows nothing. */}
+                <title>GeoQuest OK</title>
+                <meta name="description" content="GeoQuestOK blends fitness, geography, and history for Oklahoma K-12 students -- walk real Oklahoma trails, unlock landmarks, and learn state history along the way." />
+                <meta property="og:title" content="GeoQuest OK" />
+                <meta property="og:description" content="Walk real Oklahoma trails, unlock landmarks, and learn state history and geography along the way." />
+                <meta property="og:type" content="website" />
+
                 {/* Disables the browser's default hover-based responsive
                     layout for the root <ScrollView>, matching how the app
                     already lays out full-screen scroll views natively. */}

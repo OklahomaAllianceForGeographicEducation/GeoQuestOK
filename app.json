@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "expo-test-dev",
+    "name": "GeoQuest OK",
     "slug": "expo-test-dev",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/GeoQuestOK ios Logo.png",
     "scheme": "expotestdev",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,

@@ -26,7 +26,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, useColorScheme, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../commonStyles';
-import { hasSeenTour, markTourSeen, onTourReplayRequested, TOURS, TourAudience } from '../lib/onboarding';
+import { hasSeenTour, markTourSeen, onTourReplayRequested, setTourActive, TOURS, TourAudience } from '../lib/onboarding';
 import { TargetRect, useTourTargetsContext } from '../lib/tourTargets';
 import Button from './Button';
 
@@ -87,6 +87,16 @@ export default function OnboardingTour({ tourId, active = true, ready = true, on
     // flipped true either by the first-run effect below (tour hasn't been
     // seen yet) or by a manual "Replay Tour" request.
     const [visible, setVisible] = useState(false);
+
+    // Mirrors `visible` into the module-level flag other screens read via
+    // isTourActive() (see lib/onboarding.ts) so they can avoid opening a
+    // competing Modal while this tour's own Modal is on screen. Resets to
+    // false on unmount too, so a shell swap (e.g. a teacher toggling out of
+    // classic-view preview) never leaves the flag stuck true.
+    useEffect(() => {
+        setTourActive(visible);
+        return () => setTourActive(false);
+    }, [visible]);
     // stepIndex: which step of `tour.steps` is currently being shown.
     // Advances via `advance()`/onNext, or moves back via onBack.
     const [stepIndex, setStepIndex] = useState(0);

@@ -108,6 +108,17 @@ function resolveLeetspeak(text: string): string {
  * @param remoteBannedWords Dynamic array of custom banned words fetched live from Supabase.
  * @returns true if the name is allowed, false if it should be rejected.
  */
+// The same character allowance checkIsUsernameAppropriate's Layer 1 below
+// enforces (letters, spaces, hyphens only — deliberately no digits, since
+// digits are how leetspeak profanity evasion works, e.g. "a$$3"), exposed
+// separately so callers can tell "you used a character we don't allow"
+// apart from "that reads as an inappropriate word" and show an accurate
+// message instead of one generic "not allowed" for both. Call this BEFORE
+// checkIsUsernameAppropriate so the more specific reason wins.
+export function hasDisallowedCharacters(name: string): boolean {
+    return /[^\p{L}\s-]/u.test(name.trim());
+}
+
 export function checkIsUsernameAppropriate(
     name: string,
     dbWhitelist: string[],
@@ -130,9 +141,10 @@ export function checkIsUsernameAppropriate(
     // (`-`)". So a name containing a digit, an emoji, an underscore, or
     // punctuation like `$`/`@` fails this test and the whole function
     // returns false immediately -- those characters are never even
-    // reachable by the leetspeak/dictionary layers below.
-    const invalidCharRegex = /[^\p{L}\s-]/u;
-    if (invalidCharRegex.test(rawTrimmed)) {
+    // reachable by the leetspeak/dictionary layers below. See
+    // hasDisallowedCharacters above -- same check, exposed separately so
+    // callers can report this specific reason distinctly.
+    if (hasDisallowedCharacters(rawTrimmed)) {
         return false;
     }
 

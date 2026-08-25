@@ -106,7 +106,7 @@ export const TOURS: Record<TourAudience, Tour> = {
             },
             {
                 title: 'Log a Presidential Fitness challenge',
-                body: 'Tap here to log a Presidential Fitness exercise — push-ups, curl-ups, shuttle run, or the mile run. Pick your exercise and enter your score; we\'ll show you the target for your age and gender right on the screen.',
+                body: 'Tap here to log a Presidential Fitness exercise — push-ups, pull-ups, curl-ups, a plank hold, the mile run, or the 20m beep test. Pick your exercise and enter your score; we\'ll show you the target for your age and gender right on the screen.',
                 targetKey: 'student.exerciseToggle',
                 route: '/(tabs)/fitness',
             },
@@ -389,4 +389,23 @@ export function requestTourReplay(tourId: TourAudience): void {
 export function onTourReplayRequested(tourId: TourAudience, listener: ReplayListener): () => void {
     replayListeners[tourId].add(listener);
     return () => replayListeners[tourId].delete(listener);
+}
+
+// Whether a guided tour's spotlight overlay is currently visible anywhere in
+// the app. OnboardingTour is the only writer (see its `visible` effect) --
+// every other screen only ever reads this, to avoid opening a competing
+// Modal (e.g. a trail detail popup) while the tour is active. Two separate
+// React Native <Modal>s on screen at once race for top stacking on web, and
+// whichever mounted more recently wins regardless of which one actually
+// matters right now -- so a modal that pops up mid-tour can visually bury
+// the tour's own tooltip. Simplest fix is to just not let that second modal
+// open while a tour is running, rather than fight Modal-vs-Modal stacking.
+let tourActive = false;
+
+export function setTourActive(active: boolean): void {
+    tourActive = active;
+}
+
+export function isTourActive(): boolean {
+    return tourActive;
 }

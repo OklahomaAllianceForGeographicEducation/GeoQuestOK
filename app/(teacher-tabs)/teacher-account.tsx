@@ -40,7 +40,7 @@ import { confirmDeleteAccount } from '../../lib/deleteAccount';
 import { requestTourReplay } from '../../lib/onboarding';
 import { ensureProfileRow } from '../../lib/profiles';
 import { supabase } from '../../utils/supabase';
-import { checkIsUsernameAppropriate } from '../../utils/profanity';
+import { checkIsUsernameAppropriate, hasDisallowedCharacters } from '../../utils/profanity';
 
 // The subset of "profiles" table fields this screen reads/writes.
 type Profile = {
@@ -538,6 +538,10 @@ export default function TeacherAccountScreen() {
         // doesn't fetch the live Supabase-managed banned-words list, so it
         // won't catch a school-specific term added there. Found by an
         // /impeccable audit.
+        if (hasDisallowedCharacters(cleanUsername) || hasDisallowedCharacters(cleanDisplayName)) {
+            triggerAlert('Name Not Allowed', 'Names can only use letters, spaces, and hyphens — no numbers or symbols.');
+            return;
+        }
         if (!checkIsUsernameAppropriate(cleanUsername, [], []) || !checkIsUsernameAppropriate(cleanDisplayName, [], [])) {
             triggerAlert('Inappropriate Name', 'Please choose a school-appropriate username and display name.');
             return;

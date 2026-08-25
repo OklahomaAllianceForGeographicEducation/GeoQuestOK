@@ -636,11 +636,28 @@ export default function DashboardScreen() {
             if (!authData?.user) return;
             setUserId(authData.user.id);
 
-            const { data: profileRow } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', authData.user.id)
-                .single();
+            // Retry a couple of times before giving up: right after a brand
+            // new signup (create-account Edge Function writes the profile
+            // row server-side, then this client immediately signs in and
+            // lands here), there's a brief window where the freshly-issued
+            // session's first read of that same row can come back empty --
+            // confirmed live, showing "Explorer" (the profileRow-not-found
+            // fallback below) for a real account whose username was in fact
+            // set correctly the whole time. A short retry papers over that
+            // window instead of the dashboard trusting the first read as
+            // gospel.
+            let profileRow: any = null;
+            for (let attempt = 0; attempt < 3 && !profileRow; attempt++) {
+                if (attempt > 0) {
+                    await new Promise((resolve) => setTimeout(resolve, 400));
+                }
+                const { data } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('id', authData.user.id)
+                    .single();
+                profileRow = data;
+            }
 
             if (profileRow) {
                 // `??` (nullish coalescing) rather than `||` is used here

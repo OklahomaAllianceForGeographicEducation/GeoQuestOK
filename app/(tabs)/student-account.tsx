@@ -39,7 +39,7 @@ import { ensureProfileRow } from '../../lib/profiles';
 import { formatMiles } from '../../lib/trails';
 import { supabase } from '../../utils/supabase';
 // NATIVE ENGAGEMENT UTILITIES
-import { checkIsUsernameAppropriate } from '../../utils/profanity';
+import { checkIsUsernameAppropriate, hasDisallowedCharacters } from '../../utils/profanity';
 // getAnonymousName generates a stable, randomly-assigned placeholder name
 // (e.g. "Silent Falcon") derived from a user's id — used to hide a
 // student's real username on leaderboards/rosters when a class they're in
@@ -607,6 +607,12 @@ export default function AccountScreen() {
             }
 
             const currentDynamicWhitelist = whitelistRows?.map(row => row.allowed_word) || [];
+
+            if (hasDisallowedCharacters(cleanUsername)) {
+                showAlert('Nickname Not Allowed', 'Nicknames can only use letters, spaces, and hyphens — no numbers or symbols.');
+                setSavingUsername(false);
+                return;
+            }
 
             // Perform robust filter package evaluation using local whitelist and dynamic cloud dictionary
             if (!checkIsUsernameAppropriate(cleanUsername, currentDynamicWhitelist, remoteBannedWords)) {

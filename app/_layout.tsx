@@ -8,6 +8,7 @@
 // Types (TypeScript-only, no runtime code) describing the shape of the
 // event name and session object Supabase gives us when auth state changes.
 import { AuthChangeEvent, Session } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 
 // "Slot" is Expo Router's placeholder for "render whichever child route is
 // currently active here." Because this layout doesn't wrap Slot in a
@@ -39,6 +40,10 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 // any screen.
 import BadgeUnlockProvider from '../components/BadgeUnlockProvider';
 
+// Themed in-app replacement for the browser's window.alert()/window.confirm()
+// on web -- see components/AppAlertHost.tsx and lib/confirmAlert.ts.
+import AppAlertHost from '../components/AppAlertHost';
+
 // Registry that lets any screen's control mark itself as a guided-tour
 // target and lets OnboardingTour (components/OnboardingTour.tsx) find and
 // spotlight it. Mounted once here so ids are unique app-wide, not per shell.
@@ -67,6 +72,23 @@ export default Sentry.wrap(function RootLayout() {
   // so would re-subscribe the auth listener on every navigation, which
   // "run once at startup" isn't supposed to do.
   const initialPathname = usePathname();
+
+  // Expo Router's web build injects its own <title> element into <head> at
+  // runtime alongside the static one app/+html.tsx already sets -- with two
+  // <title> tags present, document.title (and therefore the actual browser
+  // tab) ends up reading whichever one comes first in the DOM, which is
+  // Expo Router's empty one, not ours. Confirmed live: curl sees one
+  // correct <title>GeoQuest OK</title> in the static HTML, but a real
+  // browser after hydration has two title elements, the first blank.
+  // Setting document.title explicitly here, after mount, wins regardless of
+  // how many stray <title> tags exist or what order they're in -- the
+  // setter always applies to the document's title as a whole, not to a
+  // specific element.
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      document.title = 'GeoQuest OK';
+    }
+  }, []);
 
   // useEffect with an empty dependency array ([] at the very end) runs its
   // function exactly once, right after this component first mounts (i.e.
@@ -215,6 +237,9 @@ export default Sentry.wrap(function RootLayout() {
                 — this is where every actual screen in the app ultimately
                 gets displayed. */}
             <Slot />
+            {/* Renders nothing until lib/confirmAlert.ts's showAlert()/
+                confirmAlert() trigger it on web — see components/AppAlertHost.tsx. */}
+            <AppAlertHost />
           </TourTargetsProvider>
         </BadgeUnlockProvider>
       </GestureHandlerRootView>

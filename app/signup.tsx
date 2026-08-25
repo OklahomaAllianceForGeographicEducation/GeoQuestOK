@@ -6,6 +6,7 @@
 // student, K-12 teacher, Site Administrator (principal), District
 // Administrator, or youth/scout leader.
 
+import * as Linking from 'expo-linking';
 import { Link, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -29,7 +30,7 @@ import WebContainer from '../components/WebContainer';
 import { resolveAppShellPath } from '../lib/access';
 import { Sentry } from '../lib/sentry';
 // A profanity/appropriateness filter used to reject inappropriate usernames.
-import { checkIsUsernameAppropriate } from '../utils/profanity';
+import { checkIsUsernameAppropriate, hasDisallowedCharacters } from '../utils/profanity';
 import { supabase } from '../utils/supabase';
 
 // The top-level account type choice.
@@ -308,6 +309,10 @@ export default function SignUp() {
         // screen doesn't use, relying only on the built-in list + the
         // remoteBannedWords fetched above.
         const emptyList: string[] = [];
+        if (hasDisallowedCharacters(cleanUsername)) {
+            setFormError("Nicknames can only use letters, spaces, and hyphens — no numbers or symbols.");
+            return;
+        }
         if (!checkIsUsernameAppropriate(cleanUsername, emptyList, remoteBannedWords)) {
             setFormError("That nickname isn't allowed. Pick a different, school-appropriate nickname.");
             return;
@@ -359,6 +364,14 @@ export default function SignUp() {
                 // entirely) or blocks the signup outright if the district
                 // has no email domain on file yet. See
                 // EMAIL_VERIFICATION_SETUP.md for the full picture.
+                // Same web/native branching login.tsx already uses for its
+                // password-reset redirect -- computed client-side since the
+                // create-account Edge Function has no window.location of
+                // its own to derive this from.
+                const emailRedirectTo = Platform.OS === 'web'
+                    ? `${window.location.origin}/login`
+                    : Linking.createURL('/login');
+
                 const { data, error } = await supabase.functions.invoke('create-account', {
                     body: {
                         email,
@@ -373,6 +386,7 @@ export default function SignUp() {
                         organizationName: cleanOrganizationName || null,
                         grades: genericGrades,
                         teacherViewPreference,
+                        emailRedirectTo,
                     },
                 });
 

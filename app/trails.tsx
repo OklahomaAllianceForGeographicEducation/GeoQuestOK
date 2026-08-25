@@ -27,6 +27,7 @@ import RoutePreviewMap from '../components/RoutePreviewMap';
 import WebContainer from '../components/WebContainer';
 import { fetchTrailDetails, fetchTrailList, formatMiles, type TrailSummary as Trail } from '../lib/trails';
 import { showAlert } from '../lib/confirmAlert';
+import { isTourActive } from '../lib/onboarding';
 
 // DIFFICULTY_COLORS now imported from commonStyles.ts (the shared design-
 // system source of truth) rather than duplicated here — this file used to
@@ -373,7 +374,12 @@ export default function TrailsScreen() {
                         <TrailCard
                             key={trail.id}
                             trail={trail}
-                            onPress={() => setSelected(trail)}
+                            // Skip opening the detail modal while a guided
+                            // tour is active -- see lib/onboarding.ts's
+                            // isTourActive(): two Modals racing for top
+                            // stacking on web is what let this modal cover
+                            // the tour's own tooltip.
+                            onPress={() => { if (!isTourActive()) setSelected(trail); }}
                             tStyles={tStyles}
                         />
                     ))}

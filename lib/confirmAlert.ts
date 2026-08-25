@@ -13,6 +13,7 @@
 // genuine Alert.alert.
 
 import { Alert, Platform } from 'react-native';
+import * as AppAlertHost from '../components/AppAlertHost';
 
 // One button in a confirmAlert(...) dialog -- deliberately a small subset
 // of React Native's own AlertButton shape (just enough fields for this
@@ -64,11 +65,9 @@ type ConfirmButton = {
  */
 export function confirmAlert(title: string, message: string, buttons: ConfirmButton[]) {
     if (Platform.OS === 'web') {
-        // The non-cancel button is the one that actually performs the
-        // action -- everything here only ever has exactly one of those.
-        const actionButton = buttons.find((b) => b.style !== 'cancel');
-        const confirmed = window.confirm(message ? `${title}\n\n${message}` : title);
-        if (confirmed) actionButton?.onPress?.();
+        // Themed in-app modal instead of the browser's native
+        // window.confirm() -- see components/AppAlertHost.tsx.
+        AppAlertHost.confirm(title, message, buttons);
         return;
     }
     Alert.alert(title, message, buttons);
@@ -101,7 +100,9 @@ export function confirmAlert(title: string, message: string, buttons: ConfirmBut
  */
 export function showAlert(title: string, message?: string) {
     if (Platform.OS === 'web') {
-        window.alert(message ? `${title}\n\n${message}` : title);
+        // Themed in-app modal instead of the browser's native
+        // window.alert() -- see components/AppAlertHost.tsx.
+        AppAlertHost.show(title, message);
         return;
     }
     Alert.alert(title, message);

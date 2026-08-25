@@ -19,7 +19,7 @@ import { Platform } from 'react-native';
 // "useRouter" is a hook that gives us an object with navigation methods
 // like .replace() and .push() so we can move the user between screens from
 // code (not just by tapping a Link).
-import { Slot, useRouter, usePathname } from 'expo-router';
+import { Slot, usePathname, useRouter } from 'expo-router';
 
 // "useEffect" is a React hook that runs a function after the component
 // renders, and optionally again whenever specified values change. Here it's
@@ -78,7 +78,7 @@ export default Sentry.wrap(function RootLayout() {
   // <title> tags present, document.title (and therefore the actual browser
   // tab) ends up reading whichever one comes first in the DOM, which is
   // Expo Router's empty one, not ours. Confirmed live: curl sees one
-  // correct <title>GeoQuest OK</title> in the static HTML, but a real
+  // correct <title>GeoQuestOK</title> in the static HTML, but a real
   // browser after hydration has two title elements, the first blank.
   // Setting document.title explicitly here, after mount, wins regardless of
   // how many stray <title> tags exist or what order they're in -- the
@@ -86,7 +86,7 @@ export default Sentry.wrap(function RootLayout() {
   // specific element.
   useEffect(() => {
     if (Platform.OS === 'web') {
-      document.title = 'GeoQuest OK';
+      document.title = 'GeoQuestOK';
     }
   }, []);
 

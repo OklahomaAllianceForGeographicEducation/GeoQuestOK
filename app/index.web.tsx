@@ -99,6 +99,9 @@ import { BRAND } from '../components/web/webBrand';
 // rather than being re-required on every render.
 const OKAGE_LOGO = require('../assets/images/sponsors/okage-logo.webp');
 const OSDE_LOGO = require('../assets/images/sponsors/osde-logo.png');
+// A real trail photo, shown full-bleed (edge-to-edge) as the hero's
+// background image.
+const TRAIL_PHOTO = require('../assets/images/P1250144.jpg');
 
 // The three feature cards shown in the "Fitness, geography, and history"
 // section further down. Kept as plain data (rather than three separate
@@ -187,11 +190,27 @@ export default function WebLandingPage() {
             <WebNav active="home" />
 
             {/* ── HERO ────────────────────────────────────────────── */}
-            {/* The big top banner: headline, subtitle, two CTA buttons, and
-                a small decorative art blob. `isWide` (see above) switches
-                this between a stacked mobile layout and a two-column
-                desktop one via heroInnerWide. */}
-            <View style={[styles.hero, { backgroundColor: theme.heroBg }]}>
+            {/* The big top banner: a full-bleed trail photo fills the
+                entire band edge-to-edge, with a dark scrim behind the
+                headline, subtitle, and two CTA buttons for legibility.
+                `isWide` (see above) switches the copy between a stacked
+                mobile layout and a two-column desktop one via
+                heroInnerWide, and gives the band more height on desktop. */}
+            <View style={[styles.hero, { minHeight: isWide ? 600 : 460 }]}>
+                {/* StyleSheet.absoluteFillObject makes this Image cover the
+                    entire hero View regardless of its height, the same way
+                    a CSS `background-image` would. contentFit="cover" crops
+                    the photo to fill that box without distorting it. */}
+                <Image
+                    source={TRAIL_PHOTO}
+                    style={StyleSheet.absoluteFillObject}
+                    contentFit="cover"
+                    accessibilityLabel="A hiker in trail shoes striding across a rocky Oklahoma ridge"
+                />
+                {/* A flat dark scrim between the photo and the text so the
+                    white headline stays readable regardless of which part
+                    of the photo sits behind it. */}
+                <View style={[StyleSheet.absoluteFillObject, styles.heroScrim]} />
                 <View style={[styles.heroInner, isWide && styles.heroInnerWide]}>
                     <View style={[styles.heroCopy, isWide && styles.heroCopyWide]}>
                         {/* The page's one h1 -- everything else below is an
@@ -203,12 +222,11 @@ export default function WebLandingPage() {
                             Make every step count by exploring the real geography and history of Oklahoma.
                         </Text>
                         <View style={[styles.heroActions, isWide && { flexDirection: 'row' }]}>
-                            {/* Primary button inverts in dark mode -- a
-                                near-black espresso fill reads fine against
-                                the bright light-mode hero band, but would
-                                nearly vanish against dark mode's already-dark
-                                one, so dark mode swaps to a bright accent
-                                fill with dark text instead (verified 6.7:1). */}
+                            {/* The photo hero is dark regardless of light/dark
+                                scheme, so both buttons always use the
+                                bright-on-dark treatment (verified 6.7:1 /
+                                9.4:1 against the scrim) rather than switching
+                                on `scheme` the way a flat-color band would. */}
                             {/* router.push('/signup') is expo-router's imperative
                                 navigation: calling this function changes the
                                 URL/screen, the same way tapping a <Link
@@ -217,33 +235,14 @@ export default function WebLandingPage() {
                                 declarative link element. accessibilityRole
                                 "link" tells screen readers/assistive tech
                                 this Pressable behaves like a hyperlink. */}
-                            <Pressable onPress={() => router.push('/signup')} style={[styles.heroPrimaryBtn, scheme === 'dark' && { backgroundColor: theme.heroAccent }]} accessibilityRole="link">
-                                <Text style={[styles.heroPrimaryBtnText, scheme === 'dark' && { color: BRAND.light.darkBand }]}>Get Started — It&apos;s Free</Text>
+                            <Pressable onPress={() => router.push('/signup')} style={[styles.heroPrimaryBtn, { backgroundColor: theme.heroAccent }]} accessibilityRole="link">
+                                <Text style={[styles.heroPrimaryBtnText, { color: BRAND.light.darkBand }]}>Get Started — It&apos;s Free</Text>
                             </Pressable>
-                            {/* Same "lighten a patch of the band" technique
-                                as the light-mode default, just with a
-                                brighter overlay in dark mode since the band
-                                itself is already dark (verified 9.4:1). */}
-                            <Pressable onPress={() => router.push('/login')} style={[styles.heroSecondaryBtn, scheme === 'dark' && { backgroundColor: 'rgba(255,255,255,0.12)' }]} accessibilityRole="link">
+                            <Pressable onPress={() => router.push('/login')} style={[styles.heroSecondaryBtn, { backgroundColor: 'rgba(255,255,255,0.12)' }]} accessibilityRole="link">
                                 <Text style={styles.heroSecondaryBtnText}>I Already Have an Account</Text>
                             </Pressable>
                         </View>
                         <Text style={styles.heroTrust}>Backed by the Oklahoma State Department of Education and the Oklahoma Alliance for Geographic Education</Text>
-                    </View>
-
-                    <View style={[styles.heroArtWrap, isWide && styles.heroArtWrapWide]}>
-                        <View style={styles.heroArtBlob}>
-                            <Ionicons name="walk" size={104} color="#FFFFFF" />
-                        </View>
-                        <View style={[styles.heroChip, { top: 6, left: -6 }]}>
-                            <Ionicons name="location" size={22} color={theme.heroAccent} />
-                        </View>
-                        <View style={[styles.heroChip, { bottom: 18, right: -10 }]}>
-                            <Ionicons name="trophy" size={22} color={theme.heroAccent} />
-                        </View>
-                        <View style={[styles.heroChip, { top: '48%', right: -18 }]}>
-                            <Ionicons name="book" size={20} color={theme.heroAccent} />
-                        </View>
                     </View>
                 </View>
             </View>
@@ -389,11 +388,25 @@ const styles = StyleSheet.create({
     rootContent: { flexGrow: 1 },
 
     // -- HERO band styles (headline, subtitle, CTA buttons, decorative art) --
-    hero: { width: '100%', paddingVertical: 64, paddingHorizontal: 24 },
+    // position: 'relative' + overflow: 'hidden' lets the absolutely
+    // positioned photo and scrim below fill exactly this band, clipped to
+    // its rounded-free rectangular bounds, while heroInner still lays out
+    // in normal flow on top of them.
+    hero: { width: '100%', paddingVertical: 64, paddingHorizontal: 24, position: 'relative', overflow: 'hidden', justifyContent: 'center' },
+    // A flat dark overlay (rather than a solid heroBg color) so the white
+    // headline/subtitle text stays legible over any part of the photo.
+    heroScrim: { backgroundColor: 'rgba(20,16,10,0.5)' },
     heroInner: { width: '100%', maxWidth: 1160, alignSelf: 'center', flexDirection: 'column' },
-    heroInnerWide: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    // flex-end (rather than the old space-between, left over from when a
+    // second decorative-art child sat opposite heroCopy) pushes the now-
+    // sole child to the right side of the band on wide screens.
+    heroInnerWide: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
     heroCopy: { width: '100%' },
-    heroCopyWide: { width: '54%' },
+    // Narrower than the old 54% (back when this shared the row with a
+    // second decorative-art child) so the box's left edge clears the
+    // hiker's leg in the new hero photo -- the right edge stays pinned to
+    // the band's right side via heroInnerWide's flex-end.
+    heroCopyWide: { width: '34%' },
     heroTitle: { fontFamily: 'Georgia', fontWeight: '800', color: '#FFFFFF', lineHeight: undefined, marginBottom: 18 },
     heroSubtitle: { color: '#FFF3E4', lineHeight: 26, marginBottom: 28, maxWidth: 520 },
     heroActions: { flexDirection: 'column', gap: 14, marginBottom: 22 },

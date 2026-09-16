@@ -7,7 +7,7 @@
 // "useState" is a React hook that gives a component its own piece of
 // memory ("state") that persists between renders and triggers a re-render
 // whenever it's updated.
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 // "View" = generic layout container (like a <div>).
 // "Text" = required wrapper for any visible text.
@@ -24,7 +24,7 @@ import { supabase } from '../utils/supabase';
 // Navigation hook, used here to send the user back to the home/root screen
 // once their password is updated. Link gives this screen an escape hatch
 // back to /login for anyone who arrived via an old/expired reset link.
-import { useRouter, Link } from 'expo-router';
+import { useRouter, useLocalSearchParams, Link } from 'expo-router';
 
 // The shared Button component (note: this imports the one in
 // components/Button.tsx, a *different* file from app/Button.tsx seen
@@ -61,6 +61,40 @@ export default function ResetPassword() {
 
     // Grabs the router so we can navigate the user away after success.
     const router = useRouter();
+
+    // Reset links now point at this page directly with a token_hash/type
+    // query pair (see supabase/email-templates/reset-password.html) instead
+    // of Supabase's own {{ .ConfirmationURL }} verify endpoint. That old
+    // link performed the verification -- and burned the one-time token --
+    // on the mere HTTP GET, which email security scanners (e.g. Microsoft
+    // Defender Safe Links on university/corporate inboxes) fetch
+    // automatically to check for phishing, consuming the link before the
+    // real user ever clicks it. Verifying explicitly here, from our own
+    // page's JS, means a scanner fetching this URL just loads a static
+    // page and never touches Supabase's API.
+    const { token_hash: tokenHashParam, type: typeParam } = useLocalSearchParams<{ token_hash?: string; type?: string }>();
+    const [verifyingLink, setVerifyingLink] = useState(false);
+    const [linkError, setLinkError] = useState<string | null>(null);
+
+    useEffect(() => {
+        const tokenHash = Array.isArray(tokenHashParam) ? tokenHashParam[0] : tokenHashParam;
+        const type = Array.isArray(typeParam) ? typeParam[0] : typeParam;
+
+        // No token_hash means either a legacy email link (still handled by
+        // the Supabase client's automatic hash-fragment detection) or the
+        // user landed here with an already-active recovery session.
+        if (!tokenHash || type !== 'recovery') {
+            return;
+        }
+
+        setVerifyingLink(true);
+        supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' }).then(({ error }) => {
+            setVerifyingLink(false);
+            if (error) {
+                setLinkError("This reset link has expired or was already used. Request a new one from the login screen.");
+            }
+        });
+    }, [tokenHashParam, typeParam]);
 
     // Same web-vs-native alert helper as app/login.tsx and app/signup.tsx.
     // Matters here specifically because RN's Alert.alert() is a silent
@@ -155,6 +189,36 @@ export default function ResetPassword() {
         // Whether it succeeded or failed, we're done loading — reset the
         // button back to its normal state.
         setLoading(false);
+    }
+
+    // Link was already used/expired before this page could verify it --
+    // show that up front rather than letting the user fill out the form
+    // and only discover it on submit.
+    if (linkError) {
+        return (
+            <View style={styles.container}>
+                <WebContainer maxWidth={420} style={{ width: '100%' }}>
+                    <Text style={styles.title}>Create New Password</Text>
+                    <Text style={styles.formError} accessibilityLiveRegion="assertive" role="alert">{linkError}</Text>
+                    <Link href="/login" asChild>
+                        <Pressable style={{ marginTop: 20 }}>
+                            <Text style={styles.linkText}>Back to Log In</Text>
+                        </Pressable>
+                    </Link>
+                    <PartnershipAcknowledgement style={styles.acknowledgementText} />
+                </WebContainer>
+            </View>
+        );
+    }
+
+    if (verifyingLink) {
+        return (
+            <View style={styles.container}>
+                <WebContainer maxWidth={420} style={{ width: '100%' }}>
+                    <Text style={styles.title}>Verifying your link...</Text>
+                </WebContainer>
+            </View>
+        );
     }
 
     return (

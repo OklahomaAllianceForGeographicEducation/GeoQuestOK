@@ -757,7 +757,11 @@ export default function SignUp() {
                                 district_admin all require a verified school
                                 email); youth_leader never gets here. */}
                             {selectedDistrict && (
-                                selectedDistrict.email_domain ? (
+                                selectedDistrict.email_domain?.trim() === '*' ? (
+                                    <Text style={[styles.domainHintText, { color: theme.subtext }]}>
+                                        You’ll need to confirm your email before your account activates.
+                                    </Text>
+                                ) : selectedDistrict.email_domain ? (
                                     <Text style={[styles.domainHintText, { color: theme.subtext }]}>
                                         Sign up with your school email ending in @{selectedDistrict.email_domain.split(',')[0].trim()} — you’ll need to confirm it before your account activates.
                                     </Text>

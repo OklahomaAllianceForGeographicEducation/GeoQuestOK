@@ -203,7 +203,7 @@ export default function LeaderboardScreen() {
                 // access to each row's position in the array via `index`.
                 const mappedEntries: LeaderboardEntry[] = (data || []).map((row, index) => ({
                     id: row.id,
-                    name: row.display_name || row.username || 'Explorer',
+                    name: row.username || row.display_name || 'Explorer',
                     // New accounts default avatar_seed to their own raw user id (not a URL)
                     // until they visit "Customize Avatar & Profile" -- only treat it as an
                     // image source once it actually looks like one, otherwise generate one.

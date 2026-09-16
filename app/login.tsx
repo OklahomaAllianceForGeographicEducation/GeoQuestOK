@@ -2,7 +2,7 @@
 // Email/password sign-in flow. After authentication it also ensures the user
 // has a profile row so the rest of the app can read display data.
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 
 // KeyboardAvoidingView automatically shifts its content up when the
 // on-screen keyboard opens, so the keyboard doesn't cover the input
@@ -13,7 +13,7 @@ import { Alert, TextInput, Text, Pressable, StyleSheet, KeyboardAvoidingView, Pl
 import { supabase } from '../utils/supabase';
 
 // Link is used here for the "Sign Up" navigation link at the bottom.
-import { useRouter, Link } from 'expo-router';
+import { useRouter, useLocalSearchParams, Link } from 'expo-router';
 
 // Builds the deep link a password-reset email should send the user back
 // to. createURL() resolves to the right thing on both platforms:
@@ -51,6 +51,41 @@ export default function Login() {
     const [formError, setFormError] = useState<string | null>(null);
     const [formNotice, setFormNotice] = useState<string | null>(null);
     const router = useRouter();
+
+    // Signup confirmation links now point here with a token_hash/type query
+    // pair (see supabase/email-templates/confirm-signup.html) instead of
+    // Supabase's own {{ .ConfirmationURL }} verify endpoint -- that old link
+    // confirmed the account (and burned the one-time token) on the mere
+    // HTTP GET, which email security scanners (e.g. Microsoft Defender Safe
+    // Links on university/corporate inboxes -- relevant here since teachers
+    // sign up with a school email) fetch automatically to check for
+    // phishing, consuming the link before the real user ever clicks it.
+    // Verifying explicitly here, from our own page's JS, means a scanner
+    // fetching this URL just loads the login page and never touches
+    // Supabase's API. A successful verifyOtp() establishes a session, which
+    // fires the SIGNED_IN event app/_layout.tsx's listener already redirects
+    // on -- so no manual navigation is needed here on success.
+    const { token_hash: tokenHashParam, type: typeParam } = useLocalSearchParams<{ token_hash?: string; type?: string }>();
+
+    useEffect(() => {
+        const tokenHash = Array.isArray(tokenHashParam) ? tokenHashParam[0] : tokenHashParam;
+        const type = Array.isArray(typeParam) ? typeParam[0] : typeParam;
+
+        if (!tokenHash || type !== 'signup') {
+            return;
+        }
+
+        setFormError(null);
+        setFormNotice('Confirming your email...');
+        supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'signup' }).then(({ error }) => {
+            if (error) {
+                setFormNotice(null);
+                setFormError('This confirmation link has expired or was already used. Sign up again, or log in below if your account is already confirmed.');
+            } else {
+                setFormNotice('Email confirmed! Logging you in...');
+            }
+        });
+    }, [tokenHashParam, typeParam]);
 
     // Normalize alert behavior across web and mobile.
     // React Native's Alert.alert() doesn't work in a web browser the same

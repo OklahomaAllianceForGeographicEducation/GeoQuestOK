@@ -57,17 +57,13 @@ export type AppRole =
  * AppRole. Certain roles (teacher, site_admin, okage) are allowed to look at
  * the app as if they were a different, lower-privileged role -- e.g. a
  * teacher toggling to 'classic' sees the exact same screens a student would.
- * 'kids' is the same idea one level deeper: the cartoony, simplified
- * elementary-student experience (`(kids-tabs)`), reachable today by a
- * student's own toggle on their account screen, and eventually the default a
- * student's self-reported grade routes them into automatically. Stored on a
- * profile's `active_view` column and normalized by `normalizeView`. Which
- * views a role may switch into is decided by `getAllowedTeacherViews`, not by
- * this type itself (this type is just the full universe of possible values).
+ * Stored on a profile's `active_view` column and normalized by
+ * `normalizeView`. Which views a role may switch into is decided by
+ * `getAllowedTeacherViews`, not by this type itself (this type is just the
+ * full universe of possible values).
  */
 export type AppView =
     | 'classic'
-    | 'kids'
     | 'teacher'
     | 'admin'
     | 'site_admin'
@@ -122,8 +118,6 @@ function normalizeRole(value?: string | null): AppRole {
 // 'classic' (the plain student-style view) when unset or unrecognized.
 function normalizeView(value?: string | null): AppView {
     switch ((value || 'classic').toLowerCase()) {
-        case 'kids':
-            return 'kids';
         case 'teacher':
             return 'teacher';
         case 'admin':
@@ -184,26 +178,20 @@ export function getResolvedView(profile?: ProfileAccessShape | null): AppView {
  */
 export function resolveAppShellPath(
     profile?: ProfileAccessShape | null
-): '/(tabs)/dashboard' | '/(kids-tabs)/dashboard' | '/(teacher-tabs)' | '/(admin-tabs)' | '/(okage-tabs)' | '/(site-admin-tabs)' {
+): '/(tabs)/dashboard' | '/(teacher-tabs)' | '/(admin-tabs)' | '/(okage-tabs)' | '/(site-admin-tabs)' {
     const role = getResolvedRole(profile);
     const view = getResolvedView(profile);
 
-    // Students choose between the standard experience and the cartoony
-    // elementary one via their own active_view toggle (see
-    // student-account.tsx) -- no separate "role" for it, same mechanism as
-    // every other role's view-preview toggle below.
+    // Students have no shell to choose between -- always the base tab bar.
     if (role === 'student') {
-        return view === 'kids' ? '/(kids-tabs)/dashboard' : '/(tabs)/dashboard';
+        return '/(tabs)/dashboard';
     }
 
     // Teachers normally land in their own dedicated shell, but if they've
     // toggled their active_view to 'classic' (previewing the student
-    // experience) or 'kids' (previewing the elementary experience), send
-    // them to the matching student-facing dashboard instead.
+    // experience), send them to the same dashboard a student would see.
     if (role === 'teacher') {
-        if (view === 'classic') return '/(tabs)/dashboard';
-        if (view === 'kids') return '/(kids-tabs)/dashboard';
-        return '/(teacher-tabs)';
+        return view === 'classic' ? '/(tabs)/dashboard' : '/(teacher-tabs)';
     }
 
     // District Administrators (signup.tsx's "District Administrator"
@@ -214,9 +202,7 @@ export function resolveAppShellPath(
     // preview the Student ("classic") experience via the active_view
     // toggle, to see what their district's students actually see.
     if (role === 'admin') {
-        if (view === 'classic') return '/(tabs)/dashboard';
-        if (view === 'kids') return '/(kids-tabs)/dashboard';
-        return '/(admin-tabs)';
+        return view === 'classic' ? '/(tabs)/dashboard' : '/(admin-tabs)';
     }
 
     // Site Administrators (signup.tsx's "Site Administrator" educator
@@ -231,14 +217,12 @@ export function resolveAppShellPath(
     // school's teachers/students actually see.
     if (role === 'site_admin') {
         if (view === 'classic') return '/(tabs)/dashboard';
-        if (view === 'kids') return '/(kids-tabs)/dashboard';
         if (view === 'teacher') return '/(teacher-tabs)';
         return '/(site-admin-tabs)';
     }
 
     if (role === 'okage') {
         if (view === 'classic') return '/(tabs)/dashboard';
-        if (view === 'kids') return '/(kids-tabs)/dashboard';
         if (view === 'teacher') return '/(teacher-tabs)';
         return '/(okage-tabs)';
     }
@@ -263,12 +247,11 @@ export function resolveAppShellPath(
  * No side effects -- pure function, no network calls.
  */
 export function getAllowedTeacherViews(role: AppRole): AppView[] {
-    if (role === 'student') return ['classic', 'kids'];
-    if (role === 'teacher') return ['classic', 'kids', 'teacher'];
-    if (role === 'admin') return ['admin', 'classic', 'kids'];
-    if (role === 'site_admin') return ['site_admin', 'teacher', 'classic', 'kids'];
+    if (role === 'teacher') return ['classic', 'teacher'];
+    if (role === 'admin') return ['admin', 'classic'];
+    if (role === 'site_admin') return ['site_admin', 'teacher', 'classic'];
     if (role === 'professor') return ['professor'];
     if (role === 'super_admin') return ['super_admin'];
-    if (role === 'okage') return ['okage', 'teacher', 'classic', 'kids'];
+    if (role === 'okage') return ['okage', 'teacher', 'classic'];
     return [];
 }

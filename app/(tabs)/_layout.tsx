@@ -92,17 +92,11 @@ export default function TabLayout() {
                         router.replace('/(site-admin-tabs)/' as any);
                     } else if (isAdmin && profile.active_view === 'admin') {
                         router.replace('/(admin-tabs)/' as any);
-                    } else if (profile.active_view === 'kids') {
-                        // Anyone (genuine student or a previewing teacher/
-                        // okage/site_admin/admin) whose active_view says
-                        // 'kids' belongs on the cartoony elementary shell,
-                        // not here -- see (kids-tabs)/_layout.tsx and
-                        // lib/access.ts's 'kids' AppView.
-                        router.replace('/(kids-tabs)/dashboard' as any);
                     }
-                    // Note: a genuine student in 'classic' view simply
-                    // falls through here with no redirect, since this IS
-                    // their home tab group.
+                    // Note: a genuine student (role isn't 'teacher',
+                    // 'okage', 'site_admin', or 'admin') simply falls
+                    // through here with no redirect, since this IS their
+                    // home tab group.
                 }
             } catch (error) {
                 console.error("Error checking preview mode status:", error);

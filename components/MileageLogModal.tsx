@@ -37,21 +37,12 @@ import { colors, Theme } from '../commonStyles';
 //   to a fixed orange.
 // - title: optional heading text shown at the top of the sheet. Defaults to
 //   "Log Your Progress".
-// - theme: optional full Theme override -- lets a non-standard shell (e.g.
-//   the cartoony `(kids-tabs)` world, which never uses the adult light/dark
-//   palette) supply its own colors instead of the device's light/dark
-//   commonStyles theme. Defaults to the usual `colors[scheme]` behavior.
-// - fontFamily: optional override for the title's display face, so a
-//   caller with its own display font (e.g. Fredoka in the kids shell)
-//   doesn't inherit this modal's default Georgia. Defaults to 'Georgia'.
 type MileageLogModalProps = {
     visible: boolean;
     onClose: () => void;
     onSubmit: (miles: number) => Promise<void> | void;
     accentColor?: string;
     title?: string;
-    theme?: Theme;
-    fontFamily?: string;
 };
 
 // Web has a physical/on-screen OS keyboard behind a real text field, so
@@ -89,19 +80,14 @@ export default function MileageLogModal({
     onSubmit,
     accentColor = '#FF5722',
     title = 'Log Your Progress',
-    theme: themeOverride,
-    fontFamily = 'Georgia',
 }: MileageLogModalProps) {
     // useColorScheme() reports the OS/app light-or-dark preference;
     // `?? 'light'` covers the brief moment it can be null/undefined before
     // that preference is known. `getStyles(theme)` (below) builds a fresh
-    // theme-colored StyleSheet for whichever scheme is active. A caller-
-    // supplied `themeOverride` (see MileageLogModalProps) wins outright --
-    // it exists specifically for shells like `(kids-tabs)` that are never
-    // meant to track the device's light/dark preference.
+    // theme-colored StyleSheet for whichever scheme is active.
     const scheme = useColorScheme() ?? 'light';
-    const theme = themeOverride ?? colors[scheme];
-    const styles = getStyles(theme, fontFamily);
+    const theme = colors[scheme];
+    const styles = getStyles(theme);
 
     // -- React state --
     // custom: the raw amount typed/tapped in so far, kept as a STRING (not
@@ -345,7 +331,7 @@ export default function MileageLogModal({
 // once per render inside the component so every fill/text/border color
 // tracks the active light/dark scheme instead of being frozen at hex
 // literals that only ever looked right in light mode.
-const getStyles = (theme: Theme, fontFamily: string = 'Georgia') => StyleSheet.create({
+const getStyles = (theme: Theme) => StyleSheet.create({
     // -- overlay/sheet container styles --
     overlay: {
         flex: 1,
@@ -382,7 +368,7 @@ const getStyles = (theme: Theme, fontFamily: string = 'Georgia') => StyleSheet.c
     // -- title text styles --
     title: {
         fontSize: 20,
-        fontFamily,
+        fontFamily: 'Georgia',
         fontWeight: '800',
         color: theme.text,
         marginBottom: 16,

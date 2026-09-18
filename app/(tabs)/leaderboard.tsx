@@ -2,15 +2,16 @@
 // Shows a ranked leaderboard of students by total miles walked, with a
 // "podium" for the top 3 and a scrollable list for everyone else. Supports
 // filtering by "My Network" (everyone the student shares a class with) or
-// by one specific class the student belongs to.
-import { useEffect, useState } from 'react';
+// by one specific class the student belongs to. All the data-fetching
+// (classes, RPC-scoped rankings) lives in `hooks/useLeaderboardData.ts`,
+// shared verbatim with the cartoony elementary shell's own leaderboard
+// screen -- this file owns only the "classic" podium/list rendering.
 import { Text, View, ScrollView, Pressable, ActivityIndicator, useColorScheme } from 'react-native';
 
 // Expo's optimized Image component (better caching/performance for remote
 // images than React Native's built-in <Image>), used here for avatar
 // pictures.
 import { Image } from 'expo-image';
-import { supabase } from '../../utils/supabase';
 
 // Unlike most other screens (which use StyleSheet.create locally), this
 // screen pulls its style OBJECT from a shared factory function,
@@ -18,29 +19,7 @@ import { supabase } from '../../utils/supabase';
 // generates a large, leaderboard-specific style object based on the
 // current color theme.
 import { colors, getLeaderboardStyles } from '../../commonStyles';
-import { showAlert } from '../../lib/confirmAlert';
-
-// Describes one row on the leaderboard.
-export type LeaderboardEntry = {
-    id: string;
-    name: string;
-    // A URL (or generated avatar URL) used as the image source for this
-    // person's picture.
-    profilePicture: string;
-    score: number;
-    // 1-based position on the leaderboard (1 = first place).
-    rank: number;
-    // Optional flag marking "this row is the person currently using the
-    // app" so it can be visually highlighted.
-    isCurrentUser?: boolean;
-};
-
-// Describes one tab in the horizontal class-filter row at the top
-// ("My Network", plus one tab per class the student is enrolled in).
-type ClassTab = {
-    id: string;
-    label: string;
-};
+import { useLeaderboardData } from '../../hooks/useLeaderboardData';
 
 // Colors used for the top-3 podium bases and medal-colored avatar rings:
 // gold-ish orange for 1st, silver gray for 2nd, bronze for 3rd. Index 0 =
@@ -55,190 +34,7 @@ export default function LeaderboardScreen() {
     // theme colors.
     const lStyles = getLeaderboardStyles(theme);
 
-    // The list of filter tabs shown at the top. Starts with just "My
-    // Network" (the default, all-encompassing view) until any class-
-    // specific tabs are loaded in.
-    const [classTabs, setClassTabs] = useState<ClassTab[]>([{ id: 'all', label: 'My Network' }]);
-    // Which tab's id is currently selected — 'all' means no class filter.
-    const [activeGroup, setActiveGroup] = useState<string>('all');
-    // The actual ranked list of people currently being displayed.
-    const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
-    const [loading, setLoading] = useState<boolean>(true);
-    // Holds an error message if fetching the student's classes fails —
-    // kept separate from the ranking-load errors (which use a plain
-    // Alert.alert instead) so the class-loading failure can be shown
-    // inline without blocking the rest of the screen.
-    const [groupsError, setGroupsError] = useState<string | null>(null);
-
-    // ── STEP 1: Fetch all specialized groups this student belongs to ──
-    useEffect(() => {
-        async function fetchJoinedGroups() {
-            try {
-                // getSession() (rather than getUser()) is used here since
-                // we only need the user id from the local session token,
-                // not a fresh network round-trip to verify the user.
-                const { data: { session } } = await supabase.auth.getSession();
-                if (!session?.user?.id) return;
-
-                // There's no foreign key between class_memberships and classes,
-                // so PostgREST can't resolve an embedded classes(...) join --
-                // fetch memberships and class names separately and merge here.
-                const { data: memberships, error: membershipsError } = await supabase
-                    .from('class_memberships')
-                    .select('class_id')
-                    .eq('user_id', session.user.id);
-
-                if (membershipsError) throw membershipsError;
-
-                // Clear out any previous error now that this fetch has
-                // succeeded so far.
-                setGroupsError(null);
-
-                if (!memberships || memberships.length === 0) {
-                    // This student isn't in any classes — reset to just
-                    // the default "My Network" tab.
-                    setClassTabs([{ id: 'all', label: 'My Network' }]);
-                    return;
-                }
-
-                // Build a de-duplicated list of class ids. `new Set(...)`
-                // automatically drops duplicate values, and spreading it
-                // back into an array (`[...new Set(...)]`) converts it
-                // back to a plain array — a common one-liner for
-                // "unique-ify this array".
-                const classIds = [...new Set(memberships.map((m) => m.class_id))];
-                const { data: classRows, error: classesError } = await supabase
-                    .from('classes')
-                    .select('id, class_name')
-                    .in('id', classIds);
-
-                if (classesError) throw classesError;
-
-                // Build a lookup Map from class id → class name, so each
-                // tab can quickly find its display label. `new Map(...)`
-                // is built directly from an array of [key, value] pairs
-                // produced by .map() below.
-                const classNameById = new Map((classRows || []).map((c) => [c.id, c.class_name]));
-                const dynamicTabs = classIds.map((classId) => ({
-                    id: classId,
-                    // Fall back to a generic "Active Group" label in the
-                    // rare case a class id has no matching name.
-                    label: classNameById.get(classId) || 'Active Group',
-                }));
-                // "My Network" always stays as the first tab, with the
-                // student's actual classes appended after it via the
-                // spread operator.
-                setClassTabs([{ id: 'all', label: 'My Network' }, ...dynamicTabs]);
-            } catch (err: any) {
-                console.log("Error sourcing group navigation channels:", err);
-                setGroupsError(err.message || 'Could not load your classes.');
-            }
-        }
-        fetchJoinedGroups();
-    }, []);
-
-    // ── STEP 2: Query Standings relative to active tab filter ──
-    // Re-runs any time `activeGroup` changes (i.e. whenever the user taps
-    // a different filter tab).
-    useEffect(() => {
-        async function fetchRealRankings() {
-            try {
-                setLoading(true);
-
-                const { data: { session } } = await supabase.auth.getSession();
-                // `|| null` normalizes a missing user id to `null` rather
-                // than `undefined`, for a consistent comparison later.
-                const uid = session?.user?.id || null;
-
-                // Rows come from a SECURITY DEFINER RPC rather than a
-                // direct `.from('profiles')` select — the RPC returns only
-                // the columns a leaderboard needs (id/username/display_name/
-                // total_miles_walked/avatar_seed), pre-scoped server-side to
-                // everyone who shares at least one class with the caller
-                // (i.e. classmates only, not the whole district). This
-                // deliberately avoids a broad table-level policy that would
-                // otherwise expose a classmate's full profile row
-                // (birth_date, etc.) just to render a mileage ranking. See
-                // supabase/scope-leaderboard-to-classmates.sql and
-                // supabase/fix-profiles-same-district-column-leak.sql.
-                // Already sorted highest-miles-first server-side.
-                type ClassmateProfileRow = {
-                    id: string;
-                    username: string | null;
-                    display_name: string | null;
-                    total_miles_walked: number | null;
-                    avatar_seed: string | null;
-                    school_name: string | null;
-                    app_role: string | null;
-                };
-                const { data: classmateRows, error } = await supabase.rpc('get_my_classmates_profiles_public');
-                if (error) throw error;
-
-                let data: ClassmateProfileRow[] = classmateRows || [];
-
-                if (activeGroup !== 'all') {
-                    // Filter down rows to only include profiles associated with the active group channel
-                    const { data: userIdsInGroup, error: membershipError } = await supabase
-                        .from('class_memberships')
-                        .select('user_id')
-                        .eq('class_id', activeGroup);
-                    if (membershipError) throw membershipError;
-
-                    const targetIds = new Set((userIdsInGroup || []).map(row => row.user_id));
-                    if (targetIds.size === 0) {
-                        // Nobody is in this class — show an empty
-                        // leaderboard rather than querying with an empty
-                        // id list (which could behave unpredictably).
-                        setEntries([]);
-                        return;
-                    }
-                    // Order from the RPC (highest-miles-first) is preserved
-                    // by .filter(), so rank still comes out correct below.
-                    data = data.filter(row => targetIds.has(row.id));
-                }
-
-                // Transform each raw database row into the LeaderboardEntry
-                // shape the UI expects. `(data || [])` guards against
-                // `data` being null. `.map((row, index) => ...)` gives
-                // access to each row's position in the array via `index`.
-                const mappedEntries: LeaderboardEntry[] = (data || []).map((row, index) => ({
-                    id: row.id,
-                    name: row.username || row.display_name || 'Explorer',
-                    // New accounts default avatar_seed to their own raw user id (not a URL)
-                    // until they visit "Customize Avatar & Profile" -- only treat it as an
-                    // image source once it actually looks like one, otherwise generate one.
-                    profilePicture: row.avatar_seed?.startsWith('http')
-                        // If the stored avatar_seed already looks like a
-                        // real image URL, swap its "/svg?" segment for
-                        // "/png?" so the app always loads a PNG (rather
-                        // than an SVG, which Image components sometimes
-                        // handle less reliably).
-                        ? row.avatar_seed.replace('/svg?', '/png?')
-                        // Otherwise, generate a placeholder "robot" avatar
-                        // from the free Dicebear API, seeded with this
-                        // user's id so the same user always gets the same
-                        // generated avatar. encodeURIComponent() escapes
-                        // any characters in the id that aren't safe to put
-                        // directly into a URL.
-                        : `https://api.dicebear.com/7.x/bottts/png?seed=${encodeURIComponent(row.id)}`,
-                    score: row.total_miles_walked || 0,
-                    // Since the query is already sorted highest-miles-
-                    // first, the array index directly gives us the rank —
-                    // index 0 is 1st place, so we add 1.
-                    rank: index + 1,
-                    isCurrentUser: row.id === uid
-                }));
-
-                setEntries(mappedEntries);
-            } catch (err: any) {
-                showAlert('Error loading rankings', err.message);
-            } finally {
-                setLoading(false);
-            }
-        }
-
-        fetchRealRankings();
-    }, [activeGroup]);
+    const { classTabs, activeGroup, setActiveGroup, entries, loading, groupsError } = useLeaderboardData();
 
     if (loading) {
         return (

@@ -435,6 +435,30 @@ export default function AccountScreen() {
     // --- Delete account state ---
     const [deletingAccount, setDeletingAccount] = useState(false);
 
+    // --- "Try the Explorer World" (kids-tabs preview) state ---
+    const [switchingWorld, setSwitchingWorld] = useState(false);
+
+    // Same optimistic-update pattern as (teacher-tabs)/teacher-account.tsx's
+    // handleToggleAppView -- flips this student's own active_view to
+    // 'kids' and sends them straight into the (kids-tabs) shell.
+    async function handleTryKidsWorld() {
+        if (switchingWorld) return;
+        setSwitchingWorld(true);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error('No user found');
+
+            const { error } = await supabase.from('profiles').update({ active_view: 'kids' }).eq('id', user.id);
+            if (error) throw error;
+
+            router.replace('/(kids-tabs)/dashboard' as any);
+        } catch (err: any) {
+            showAlert('Could Not Switch', err.message || 'Please try again.');
+        } finally {
+            setSwitchingWorld(false);
+        }
+    }
+
     // Fetch the live banned words database dictionary on mount
     useEffect(() => {
         async function loadBannedWords() {
@@ -895,6 +919,30 @@ export default function AccountScreen() {
                 <View style={baseStyles.AccountMain}>
                     <Button label="View All Activity Data" onPress={() => void openActivityData()} />
                     <Button label="Join & Manage Classes" onPress={() => void openGroupsPortal()} />
+
+                    {/* Lets a student try the cartoony elementary shell
+                        (`(kids-tabs)`) without anything else about their
+                        account changing -- same `active_view` toggle
+                        mechanism every other role already uses to preview
+                        a different experience (see
+                        lib/access.ts::getAllowedTeacherViews and
+                        (teacher-tabs)/teacher-account.tsx's identical
+                        "classic"/"teacher" pattern), one level deeper. */}
+                    <Pressable
+                        onPress={() => void handleTryKidsWorld()}
+                        disabled={switchingWorld}
+                        style={{ alignSelf: 'center', marginTop: 20, flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 13, paddingHorizontal: 18, borderRadius: 10, borderWidth: 1, borderColor: theme.secondary }}
+                        accessibilityRole="button"
+                    >
+                        {switchingWorld ? (
+                            <ActivityIndicator color={theme.secondary} size="small" />
+                        ) : (
+                            <>
+                                <Text style={{ fontSize: 15 }}>🌎</Text>
+                                <Text style={{ color: theme.secondary, fontWeight: '600', fontSize: 14 }}>Try the Explorer World (For Younger Grades)</Text>
+                            </>
+                        )}
+                    </Pressable>
                     {/* Demoted from a full-width filled Button (identical
                         size/shape to the two primary actions above,
                         distinguished only by red fill) to a smaller

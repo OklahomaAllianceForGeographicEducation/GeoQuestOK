@@ -51,6 +51,12 @@ type LandmarkLike = {
 //   modal needing to know anything about that bookkeeping itself.
 // - accentColor: hex color used for the Close button and Submit button
 //   backgrounds, and the selected-choice border; defaults to an orange.
+// - theme: optional full Theme override, same purpose as
+//   MileageLogModal's -- lets a non-standard shell (e.g. `(kids-tabs)`)
+//   supply its own palette instead of the device's light/dark commonStyles
+//   theme. Defaults to the usual `colors[scheme]` behavior.
+// - fontFamily: optional override for the landmark title's display face.
+//   Defaults to 'Georgia'.
 type QuizModalProps = {
     landmark: LandmarkLike;
     assignedQuiz?: AssignedQuiz | null;
@@ -60,6 +66,8 @@ type QuizModalProps = {
     onClose: () => void;
     onAnswered?: (questionId: string, isCorrect: boolean) => void;
     accentColor?: string;
+    theme?: Theme;
+    fontFamily?: string;
 };
 
 // Fisher-Yates shuffle so the correct answer doesn't always land in the same slot.
@@ -95,6 +103,8 @@ export default function QuizModal({
     onClose,
     onAnswered,
     accentColor = '#DE9027',
+    theme: themeOverride,
+    fontFamily = 'Georgia',
 }: QuizModalProps) {
     // useColorScheme reports the device/browser's light-or-dark preference;
     // `?? 'light'` covers the brief moment it can report null/undefined
@@ -102,10 +112,11 @@ export default function QuizModal({
     // color palette from commonStyles.ts, and `getStyles(theme)` builds a
     // fresh StyleSheet using those colors (see the getStyles comment near
     // the bottom of this file for why it's a function instead of a plain
-    // StyleSheet.create call).
+    // StyleSheet.create call). A caller-supplied `themeOverride` wins
+    // outright -- see MileageLogModal's identical pattern.
     const scheme = useColorScheme() ?? 'light';
-    const theme = colors[scheme];
-    const styles = getStyles(theme);
+    const theme = themeOverride ?? colors[scheme];
+    const styles = getStyles(theme, fontFamily);
     // The actual quiz question object, or null if no quiz was assigned.
     const question = assignedQuiz?.question ?? null;
     // Only show the interactive quiz section when there IS a question AND
@@ -286,7 +297,7 @@ export default function QuizModal({
 // answeredBox/answeredText, resultText) are deliberately left as fixed
 // semantic colors rather than theme tokens -- "correct" and "incorrect"
 // need to read the same regardless of light/dark scheme.
-const getStyles = (theme: Theme) => StyleSheet.create({
+const getStyles = (theme: Theme, fontFamily: string = 'Georgia') => StyleSheet.create({
     overlay: {
         justifyContent: 'flex-end',
     },
@@ -322,7 +333,7 @@ const getStyles = (theme: Theme) => StyleSheet.create({
     },
     title: {
         fontSize: 22,
-        fontFamily: 'Georgia',
+        fontFamily,
         fontWeight: '800',
         color: theme.text,
         marginBottom: 4,

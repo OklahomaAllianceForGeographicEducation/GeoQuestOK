@@ -8,10 +8,10 @@
 // screen is registered as the "Account" tab by that folder's _layout.tsx.
 //
 // District Admin's account screen: identity + district assignment display,
-// and sign out. No view switcher -- District Administrators don't preview
-// the Teacher or Student experience; that capability lives on the Site
-// Administrator account screen instead (lib/access.ts's
-// getAllowedTeacherViews returns only ['admin'] for this role).
+// a District Admin/Student view switcher (same segmented-control pattern
+// used by the Teacher/Site Admin/OKAGE account screens -- see
+// lib/access.ts's getAllowedTeacherViews, which returns ['admin', 'classic']
+// for this role), and sign out.
 
 import { Ionicons } from '@expo/vector-icons';
 // `useFocusEffect` (expo-router/React Navigation) runs a callback every time
@@ -22,7 +22,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { colors, getGlobalStyles, Theme } from '../../commonStyles';
-import { confirmAlert } from '../../lib/confirmAlert';
+import { confirmAlert, showAlert } from '../../lib/confirmAlert';
 import { signOutAndRedirect } from '../../lib/auth';
 import { confirmDeleteAccount } from '../../lib/deleteAccount';
 import { requestTourReplay } from '../../lib/onboarding';
@@ -30,12 +30,13 @@ import { supabase } from '../../utils/supabase';
 
 // Shape of the profile data this screen actually needs to display. Kept
 // narrow/local to this file (rather than reusing a giant shared "Profile"
-// type) since this screen only ever reads these 4 fields.
+// type) since this screen only ever reads these fields.
 type AdminProfile = {
     display_name: string | null;
     username: string | null;
     email: string | null;
     school_district_name: string | null;
+    active_view: string | null;
 };
 
 // The District Admin's "Account" tab: shows who is signed in, which
@@ -78,13 +79,14 @@ export default function AdminAccount() {
             if (!user) return;
 
             // Read this user's row from the `profiles` table, but only the
-            // 3 columns this screen actually displays (name, username,
-            // district name). `.eq('id', user.id)` scopes it to just this
-            // user; `.maybeSingle()` returns null (instead of throwing) if
-            // no row is found, which is friendlier here than `.single()`.
+            // columns this screen actually needs (name, username, district
+            // name, active_view). `.eq('id', user.id)` scopes it to just
+            // this user; `.maybeSingle()` returns null (instead of
+            // throwing) if no row is found, which is friendlier here than
+            // `.single()`.
             const { data } = await supabase
                 .from('profiles')
-                .select('display_name, username, school_district_name')
+                .select('display_name, username, school_district_name, active_view')
                 .eq('id', user.id)
                 .maybeSingle();
 
@@ -97,6 +99,7 @@ export default function AdminAccount() {
                 username: data?.username ?? null,
                 email: user.email ?? null,
                 school_district_name: data?.school_district_name ?? null,
+                active_view: data?.active_view ?? 'admin',
             });
         } finally {
             // Runs whether the try block succeeded or threw, so the
@@ -117,6 +120,55 @@ export default function AdminAccount() {
             void loadProfile();
         }, [loadProfile])
     );
+
+    // Same optimistic-update pattern for switching between the District
+    // Admin and Classic (student-style) views used by
+    // teacher-account.tsx/site-admin-account.tsx/okage-account.tsx: update
+    // local state immediately, persist `active_view` to Supabase, then
+    // route to the matching shell -- rolling the local state back and
+    // showing an alert if the database update fails.
+    const applyViewSwitch = async (targetView: 'admin' | 'classic') => {
+        const previousView = profile?.active_view;
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            setProfile(prev => prev ? { ...prev, active_view: targetView } : null);
+
+            const { error } = await supabase
+                .from('profiles')
+                .update({ active_view: targetView })
+                .eq('id', user.id);
+
+            if (error) throw error;
+
+            router.replace((targetView === 'classic' ? '/(tabs)/dashboard' : '/(admin-tabs)/') as any);
+        } catch (err: any) {
+            setProfile(prev => prev ? { ...prev, active_view: previousView ?? prev.active_view } : null);
+            showAlert('View Switch Failed', err.message || 'Could not update your workspace view.');
+        }
+    };
+
+    // Entry point for the View Switcher's two segments. Switching TO
+    // Classic Trail swaps this admin's entire navigation shell and
+    // persists that choice (it's still in effect on their next login), so
+    // -- unlike returning to District Admin, which just undoes that --  it
+    // gets the same one-tap confirm dialog already used by Sign Out on
+    // this same screen, rather than firing immediately on a single tap.
+    const handleToggleAppView = (targetView: 'admin' | 'classic') => {
+        if (targetView === 'classic') {
+            confirmAlert(
+                'Switch to Classic Trail?',
+                'This switches your view to the student experience. You can return to District Admin anytime from the orange banner at the top.',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Switch View', onPress: () => void applyViewSwitch('classic') },
+                ]
+            );
+            return;
+        }
+        void applyViewSwitch('admin');
+    };
 
     // Event handler for the "Sign Out" button. Shows a confirmation dialog
     // first (via the cross-platform `confirmAlert` helper) so a stray tap
@@ -162,6 +214,36 @@ export default function AdminAccount() {
                     <Text style={baseStyles.profileSubtext}>District Administrator</Text>
                 </View>
 
+                {/* View Switcher. A styled Pressable row rather than each
+                    platform's native segmented control (UISegmentedControl
+                    on iOS, Material SegmentedButtons on Android) -- a
+                    deliberate choice, not an oversight: this component is
+                    shared verbatim across web/iOS/Android (see PRODUCT.md's
+                    Operating Context), and neither native control has a web
+                    equivalent, so using either would mean a second,
+                    platform-forked implementation of this same toggle. What
+                    IS fixed here is the accessible semantics: wrapping the
+                    two `role="radio"` Pressables in a `radiogroup` gives
+                    screen readers the same "one control, N options" model a
+                    real segmented control exposes natively, instead of two
+                    unrelated standalone radios. Revisit the "styled
+                    Pressables" choice only if this toggle gains a native-
+                    only distribution (no web target). Caught by an
+                    /impeccable adapt pass. */}
+                <View style={[styles.viewSwitcherBox, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}>
+                    <Text style={[styles.switcherTitle, { color: theme.text }]} accessibilityRole="header">Active App View</Text>
+                    <View style={styles.segmentedBar} accessibilityRole="radiogroup" aria-label="Active app view">
+                        <Pressable style={[styles.segmentToggle, profile?.active_view === 'admin' && { backgroundColor: theme.accent }]} onPress={() => void handleToggleAppView('admin')} accessibilityRole="radio" accessibilityState={{ selected: profile?.active_view === 'admin' }} aria-selected={profile?.active_view === 'admin'}>
+                            <Ionicons name="business" size={14} color={profile?.active_view === 'admin' ? theme.accentText : theme.text} />
+                            <Text style={[styles.segmentLabel, profile?.active_view === 'admin' ? { color: theme.accentText } : { color: theme.text }]}>District Admin</Text>
+                        </Pressable>
+                        <Pressable style={[styles.segmentToggle, profile?.active_view === 'classic' && { backgroundColor: theme.accent }]} onPress={() => void handleToggleAppView('classic')} accessibilityRole="radio" accessibilityState={{ selected: profile?.active_view === 'classic' }} aria-selected={profile?.active_view === 'classic'}>
+                            <Ionicons name="walk" size={14} color={profile?.active_view === 'classic' ? theme.accentText : theme.text} />
+                            <Text style={[styles.segmentLabel, profile?.active_view === 'classic' ? { color: theme.accentText } : { color: theme.text }]}>Classic Trail</Text>
+                        </Pressable>
+                    </View>
+                </View>
+
                 <View style={baseStyles.AccountMain}>
                     {/* Read-only info card: district name and email pulled
                         straight from `profile` state, with dash/placeholder
@@ -189,7 +271,7 @@ export default function AdminAccount() {
                         style={{ alignSelf: 'center', marginTop: 16, paddingVertical: 13, paddingHorizontal: 18, borderRadius: 10, borderWidth: 1, borderColor: theme.accent }}
                         accessibilityRole="button"
                     >
-                        <Text style={{ color: theme.accent, fontWeight: '600', fontSize: 14 }}>Replay Tour</Text>
+                        <Text style={{ color: theme.accent, fontWeight: '600', fontSize: 14, fontFamily: 'Georgia' }}>Replay Tour</Text>
                     </Pressable>
 
                     <Pressable
@@ -202,7 +284,7 @@ export default function AdminAccount() {
                         style={{ alignSelf: 'center', marginTop: 10, paddingVertical: 13, paddingHorizontal: 18, borderRadius: 10, borderWidth: 1, borderColor: theme.error }}
                         accessibilityRole="button"
                     >
-                        <Text style={{ color: theme.error, fontWeight: '600', fontSize: 14 }}>Sign Out</Text>
+                        <Text style={{ color: theme.error, fontWeight: '600', fontSize: 14, fontFamily: 'Georgia' }}>Sign Out</Text>
                     </Pressable>
 
                     {/* Deliberately understated relative to Sign Out --
@@ -221,7 +303,7 @@ export default function AdminAccount() {
                     {deletingAccount ? (
                             <ActivityIndicator color={theme.subtext} size="small" />
                         ) : (
-                            <Text style={{ color: theme.subtext, fontWeight: '600', fontSize: 13, textDecorationLine: 'underline' }}>Delete Account</Text>
+                            <Text style={{ color: theme.subtext, fontWeight: '600', fontSize: 13, textDecorationLine: 'underline', fontFamily: 'Georgia' }}>Delete Account</Text>
                         )}
                     </Pressable>
                 </View>
@@ -248,7 +330,34 @@ export default function AdminAccount() {
 const getStyles = (theme: Theme) => StyleSheet.create({
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     iconAvatar: { width: 106, height: 106, borderRadius: 53, borderWidth: 3, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
-    fieldLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1, marginBottom: 4 },
+    // fontFamily: 'Georgia' added to fieldLabel/switcherTitle/segmentLabel
+    // -- DESIGN.md's Serif-for-Names Rule covers field/section labels and
+    // "a button's action" alike, and all three had silently fallen back to
+    // the system sans font. Caught by an /impeccable audit.
+    // fontWeight bumped 700->800 -- this is an Eyebrow-role label (11px
+    // uppercase kicker), and every sibling Eyebrow-style label in this
+    // shell (kicker, groupLabel, sectionHeading) uses the documented 800.
+    // Caught by an /impeccable critique.
+    fieldLabel: { fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 4, fontFamily: 'Georgia' },
     fieldValue: { fontSize: 16, fontWeight: '600', fontFamily: 'Georgia' },
-    helperText: { fontSize: 12, lineHeight: 17, textAlign: 'center', marginTop: 16, fontStyle: 'italic' },
+    // fontSize bumped 12->13 -- this is the screen's core privacy-
+    // reassurance sentence ("this account never has access to individual
+    // student names..."), missed by the prior Georgia/caption-size passes
+    // on this file. Caught by an /impeccable critique.
+    helperText: { fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 16, fontStyle: 'italic' },
+    // Same View Switcher styling used by teacher-account.tsx/
+    // site-admin-account.tsx/okage-account.tsx.
+    // shadowOffset/Opacity/Radius/elevation added -- was the one card on
+    // this screen with a border but no ambient shadow, unlike baseStyles.card
+    // just below it. Caught by an /impeccable audit.
+    viewSwitcherBox: { borderWidth: 1, padding: 14, borderRadius: 16, marginHorizontal: 20, marginTop: 10, marginBottom: 14, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 2 },
+    switcherTitle: { fontSize: 13, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.3, marginBottom: 10, textAlign: 'center', fontFamily: 'Georgia' },
+    segmentedBar: { flexDirection: 'row', gap: 8 },
+    // paddingVertical 10 (matching the pattern this style was copied from)
+    // measured ~36px live -- under the 44pt/48dp touch-target floor. 14
+    // matches the paddingVertical already used by this screen's Sign Out/
+    // Delete Account buttons, which were fixed to clear the same floor
+    // after an earlier /impeccable critique caught them at 39px.
+    segmentToggle: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 14, borderRadius: 10, backgroundColor: theme.background, minHeight: 44 },
+    segmentLabel: { fontSize: 13, fontWeight: '700', fontFamily: 'Georgia' },
 });

@@ -248,24 +248,28 @@ export default function BadgeUnlockProvider({ children }: { children: ReactNode 
             if (badgeRowsError) throw badgeRowsError;
 
             const rows = (badgeRows ?? []) as StudentBadgeRow[];
-            // Step 2: figure out which of those badge ids we haven't
+
+            // Step 2: if this is the very first fetch for this user
+            // (initialHydrationRef still false), mark ALL of their
+            // existing badges as "seen" now -- without this, a user with,
+            // say, 10 already-earned badges would be shown 10 popups the
+            // moment the app opens (or every time they log back in). Only
+            // badges unlocked AFTER this point should ever trigger a
+            // popup, so we bail here rather than falling through to the
+            // "fresh ids" logic below.
+            if (!initialHydrationRef.current) {
+                rows.forEach((row) => seenIdsRef.current.add(String(row.badge_id)));
+                initialHydrationRef.current = true;
+                return;
+            }
+
+            // Step 3: figure out which of those badge ids we haven't
             // already accounted for (i.e. aren't in seenIdsRef yet).
             const freshIds = rows
                 .map((row) => String(row.badge_id))
                 .filter((id) => id && !seenIdsRef.current.has(id));
 
             if (freshIds.length === 0) {
-                // Nothing new. If this is the very first fetch for this
-                // user (initialHydrationRef still false), mark ALL of
-                // their existing badges as "seen" now -- this is the
-                // mechanism that prevents a user with, say, 10
-                // already-earned badges from being shown 10 popups the
-                // moment the app opens. Only badges unlocked AFTER this
-                // point will ever trigger a popup.
-                if (!initialHydrationRef.current) {
-                    rows.forEach((row) => seenIdsRef.current.add(String(row.badge_id)));
-                    initialHydrationRef.current = true;
-                }
                 return;
             }
 

@@ -687,7 +687,7 @@ export const getDashboardStyles = (theme: Theme) =>
             marginHorizontal: 16,
             borderRadius: 20,
             overflow: 'hidden',
-            height: 280,
+            height: 420,
             borderWidth: 1,
             borderColor: theme.border,
             shadowColor: theme.shadow,
@@ -1328,7 +1328,7 @@ export const getTrailStyles = (theme: Theme) =>
         },
         previewMapFrame: {
             marginTop: 10,
-            height: 180,
+            height: 320,
             borderRadius: 14,
             overflow: 'hidden',
             borderWidth: 1,

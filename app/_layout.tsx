@@ -40,6 +40,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 // any screen.
 import BadgeUnlockProvider from '../components/BadgeUnlockProvider';
 
+// Shows a one-time (skippable) modal prompting a student to set their
+// age/gender bracket the first time they log in, instead of relying on the
+// buried "tap to change" panel on the Fitness tab -- see the file itself
+// for the full gating logic (student role + no birth_date yet + not
+// already skipped on this device).
+import FirstLoginProfilePrompt from '../components/FirstLoginProfilePrompt';
+
 // Themed in-app replacement for the browser's window.alert()/window.confirm()
 // on web -- see components/AppAlertHost.tsx and lib/confirmAlert.ts.
 import AppAlertHost from '../components/AppAlertHost';
@@ -52,6 +59,11 @@ import { TourTargetsProvider } from '../lib/tourTargets';
 // Our configured Supabase client (from utils/supabase.js) — this is the
 // object used to talk to the Supabase backend (auth, database, etc.).
 import { supabase } from '../utils/supabase';
+
+// Cross-platform themed replacement for Alert.alert() (a no-op on web) --
+// see lib/confirmAlert.ts. Used below to tell the user their email link
+// expired instead of silently dropping them on the landing page.
+import { showAlert } from '../lib/confirmAlert';
 
 // Initializes Sentry as a side effect of import (see lib/sentry.ts) and
 // gives us Sentry.wrap below, which reports uncaught JS errors and basic
@@ -88,6 +100,46 @@ export default Sentry.wrap(function RootLayout() {
     if (Platform.OS === 'web') {
       document.title = 'GeoQuestOK';
     }
+  }, []);
+
+  // Supabase redirects failed/expired auth links (magic link, password
+  // reset, email confirmation) back to this page with the failure encoded
+  // in the URL hash -- e.g.
+  // "#error=access_denied&error_code=otp_expired&error_description=...".
+  // Hash fragments never reach the server, and nothing else in this app
+  // reads this one, so until now a user landing here with a stale link was
+  // silently dropped on the landing page with a broken-looking URL and no
+  // explanation of what went wrong. This tells them, then strips the hash
+  // so a refresh (or a remount of this layout) doesn't see -- and
+  // re-process -- the same error again.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+
+    const hash = window.location.hash;
+    if (!hash.includes('error=')) return;
+
+    // Supabase's redirect hash is a plain "key=value&key=value..." query
+    // string minus the leading "?" -- URLSearchParams parses that directly
+    // (and, per the application/x-www-form-urlencoded spec it follows,
+    // already turns "+" back into spaces and decodes %XX escapes).
+    const params = new URLSearchParams(hash.slice(1));
+    const errorCode = params.get('error_code');
+    const errorDescription = params.get('error_description');
+
+    if (errorCode === 'otp_expired') {
+      showAlert('Link Expired', 'That email link is no longer valid. Please request a new one and try again.');
+    } else {
+      showAlert('Sign-In Link Error', errorDescription || 'That link is no longer valid. Please request a new one and try again.');
+    }
+
+    // Expo Router's own client-side history sync (part of hydrating its
+    // navigation state from the initial URL) re-applies the page's
+    // original location -- hash included -- right after mount, clobbering
+    // a replaceState() called from this same effect tick. Deferring to the
+    // next tick lets that sync finish first so the clear actually sticks.
+    setTimeout(() => {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }, 0);
   }, []);
 
   // useEffect with an empty dependency array ([] at the very end) runs its
@@ -240,6 +292,9 @@ export default Sentry.wrap(function RootLayout() {
             {/* Renders nothing until lib/confirmAlert.ts's showAlert()/
                 confirmAlert() trigger it on web — see components/AppAlertHost.tsx. */}
             <AppAlertHost />
+            {/* Renders nothing unless the logged-in user is a student who's
+                never set an age/gender bracket yet -- see the file itself. */}
+            <FirstLoginProfilePrompt />
           </TourTargetsProvider>
         </BadgeUnlockProvider>
       </GestureHandlerRootView>

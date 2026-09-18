@@ -2,8 +2,8 @@
 // Bottom tab navigator for the STUDENT ("classic") view: Dashboard,
 // Fitness, Leaderboard, Passport, Account. This is the main app experience
 // for regular students, but it's also reused as a "preview" mode for
-// teachers/OKAGE staff/Site Administrators who want to see what students
-// see. District Administrators don't preview -- see lib/access.ts.
+// teachers/OKAGE staff/Site Administrators/District Administrators who want
+// to see what students see.
 
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs, useRouter } from 'expo-router';
@@ -27,14 +27,15 @@ export default function TabLayout() {
     // every screen's content edge-to-edge across the window.
     const { isWideWeb } = useResponsive(1100);
 
-    // Whether the current user is a teacher/okage/site_admin who is
+    // Whether the current user is a teacher/okage/site_admin/admin who is
     // actively previewing the student ("classic") view.
     const [isTeacherPreviewing, setIsTeacherPreviewing] = useState(false);
     // Remembers which "real" role this previewing user actually has, so
     // the "return to ___ view" banner and button know exactly where to
-    // send them back. Defaults to 'teacher' but gets corrected to 'okage'
-    // or 'site_admin' if that's what the loaded profile turns out to be.
-    const [previewingRole, setPreviewingRole] = useState<'teacher' | 'okage' | 'site_admin'>('teacher');
+    // send them back. Defaults to 'teacher' but gets corrected to 'okage',
+    // 'site_admin', or 'admin' if that's what the loaded profile turns out
+    // to be.
+    const [previewingRole, setPreviewingRole] = useState<'teacher' | 'okage' | 'site_admin' | 'admin'>('teacher');
     const [switchingBack, setSwitchingBack] = useState(false);
     // Whether checkViewMode below has resolved at least once -- see its
     // `finally` block.
@@ -60,37 +61,42 @@ export default function TabLayout() {
                     const isTeacher = profile.role === 'teacher';
                     const isOkage = profile.role === 'okage';
                     const isSiteAdmin = profile.role === 'site_admin';
+                    const isAdmin = profile.role === 'admin';
                     const isInClassicView = profile.active_view === 'classic';
 
-                    // If this user is an okage staff member or a site
-                    // admin, the banner should name that role; otherwise
-                    // it's a teacher, so "return to Teacher view".
-                    setPreviewingRole(isOkage ? 'okage' : isSiteAdmin ? 'site_admin' : 'teacher');
+                    // If this user is an okage staff member, a site admin,
+                    // or a district admin, the banner should name that
+                    // role; otherwise it's a teacher, so "return to
+                    // Teacher view".
+                    setPreviewingRole(isOkage ? 'okage' : isSiteAdmin ? 'site_admin' : isAdmin ? 'admin' : 'teacher');
 
                     // Show the preview banner only when the account is
-                    // actually a teacher, okage, or site_admin role (not a
-                    // genuine student) AND they've explicitly switched
-                    // their active_view to 'classic' to preview the
-                    // student experience.
-                    setIsTeacherPreviewing((isTeacher || isOkage || isSiteAdmin) && isInClassicView);
+                    // actually a teacher, okage, site_admin, or admin role
+                    // (not a genuine student) AND they've explicitly
+                    // switched their active_view to 'classic' to preview
+                    // the student experience.
+                    setIsTeacherPreviewing((isTeacher || isOkage || isSiteAdmin || isAdmin) && isInClassicView);
 
-                    // Defensive redirects: if a teacher/okage/site_admin
-                    // user's active_view somehow says they should be on
-                    // THEIR OWN tabs (not previewing anything) but they've
-                    // still landed here on the student tabs, bounce them
-                    // back to where they actually belong. This can happen,
-                    // for example, if a stale link or back-navigation puts
-                    // them on the wrong screen.
+                    // Defensive redirects: if a teacher/okage/site_admin/
+                    // admin user's active_view somehow says they should be
+                    // on THEIR OWN tabs (not previewing anything) but
+                    // they've still landed here on the student tabs, bounce
+                    // them back to where they actually belong. This can
+                    // happen, for example, if a stale link or back-
+                    // navigation puts them on the wrong screen.
                     if (isTeacher && profile.active_view === 'teacher') {
                         router.replace('/(teacher-tabs)/' as any);
                     } else if (isOkage && profile.active_view === 'okage') {
                         router.replace('/(okage-tabs)/' as any);
                     } else if (isSiteAdmin && profile.active_view === 'site_admin') {
                         router.replace('/(site-admin-tabs)/' as any);
+                    } else if (isAdmin && profile.active_view === 'admin') {
+                        router.replace('/(admin-tabs)/' as any);
                     }
                     // Note: a genuine student (role isn't 'teacher',
-                    // 'okage', or 'site_admin') simply falls through here
-                    // with no redirect, since this IS their home tab group.
+                    // 'okage', 'site_admin', or 'admin') simply falls
+                    // through here with no redirect, since this IS their
+                    // home tab group.
                 }
             } catch (error) {
                 console.error("Error checking preview mode status:", error);
@@ -133,7 +139,10 @@ export default function TabLayout() {
 
             setIsTeacherPreviewing(false);
             const destination =
-                previewingRole === 'okage' ? '/(okage-tabs)/' : previewingRole === 'site_admin' ? '/(site-admin-tabs)/' : '/(teacher-tabs)/';
+                previewingRole === 'okage' ? '/(okage-tabs)/'
+                    : previewingRole === 'site_admin' ? '/(site-admin-tabs)/'
+                    : previewingRole === 'admin' ? '/(admin-tabs)/'
+                    : '/(teacher-tabs)/';
             router.replace(destination as any);
         } catch (error) {
             console.error("Failed to return to previous view:", error);
@@ -170,7 +179,7 @@ export default function TabLayout() {
                             // correct role to return to, using the same
                             // ternary logic seen elsewhere in this file.
                             <Text style={styles.bannerText}>
-                                Previewing as Student — Tap to Return to {previewingRole === 'okage' ? 'OKAGE' : previewingRole === 'site_admin' ? 'Site Admin' : 'Teacher'} View
+                                Previewing as Student — Tap to Return to {previewingRole === 'okage' ? 'OKAGE' : previewingRole === 'site_admin' ? 'Site Admin' : previewingRole === 'admin' ? 'District Admin' : 'Teacher'} View
                             </Text>
                         )}
                     </TouchableOpacity>

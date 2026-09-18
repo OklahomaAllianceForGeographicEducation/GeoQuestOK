@@ -71,6 +71,7 @@ import OnboardingTour from '../../components/OnboardingTour';
 import TourTarget from '../../components/tour/TourTarget';
 import { useResponsive } from '../../hooks/useResponsive';
 import { resolveAppShellPath } from '../../lib/access';
+import { showAlert } from '../../lib/confirmAlert';
 import { supabase } from '../../utils/supabase';
 
 // The default export of a `_layout.tsx` file is the component Expo Router
@@ -151,7 +152,15 @@ export default function AdminTabLayout() {
                     // Couldn't load a profile (e.g. row missing, RLS denied
                     // it, network hiccup) -- fail safe by sending the user
                     // back to the public landing page rather than showing
-                    // this admin shell.
+                    // this admin shell. Unlike the "nobody is signed in"
+                    // case above, this IS a real failure for someone who
+                    // WAS signed in a moment ago -- surfacing it (rather
+                    // than silently bouncing, indistinguishable from never
+                    // having logged in) matters more here than on the
+                    // student/teacher shells, since this role is trusted
+                    // with district-wide reporting. Caught by an
+                    // /impeccable critique.
+                    showAlert('Could Not Load Your Account', 'Your session may need to be refreshed. Please sign in again.');
                     router.replace('/' as any);
                     return;
                 }
@@ -177,7 +186,10 @@ export default function AdminTabLayout() {
                 setChecked(true);
             } catch (err) {
                 console.error('Error checking district admin access:', err);
-                if (isMounted) router.replace('/' as any);
+                if (isMounted) {
+                    showAlert('Could Not Load Your Account', 'Something went wrong checking your account. Please sign in again.');
+                    router.replace('/' as any);
+                }
             }
         }
 

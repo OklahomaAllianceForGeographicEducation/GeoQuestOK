@@ -211,6 +211,10 @@ export default function ClassManagementHub() {
                     total_miles_walked: row.profiles.total_miles_walked || 0
                 }));
 
+            // Sort alphabetically by display name so the roster is easy
+            // to scan rather than showing up in enrollment order.
+            mappedStudents.sort((a, b) => a.display_name.localeCompare(b.display_name));
+
             setRoster(mappedStudents);
 
             // Fetching quiz participation is wrapped in its own nested

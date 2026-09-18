@@ -38,12 +38,18 @@ import * as Print from 'expo-print';
 // focused tab -- not just once on first mount like a plain `useEffect`. That
 // matters here because switching away to another tab and back should
 // refresh the report data in case something changed in the meantime.
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import React, { useCallback, useState } from 'react';
 import {
     ActivityIndicator,
     Platform,
     Pressable,
+    // RefreshControl wires up the classic native "pull down to refresh"
+    // gesture -- overview.tsx and schools.tsx already had this; adding it
+    // here too so all three data screens in this shell behave the same
+    // way. Caught by an /impeccable audit.
+    RefreshControl,
     ScrollView,
     StyleSheet,
     Text,
@@ -56,8 +62,13 @@ import { showAlert } from '../../lib/confirmAlert';
 import {
     computeDistrictTotals,
     fetchDistrictAdminClassReport,
+    fetchDistrictAdminSchoolTotals,
+    fetchDistrictAdminTotals,
+    fetchDistrictSchoolRegistry,
     groupBySchool,
+    mergeWithSchoolRegistry,
     type ClassReportRow,
+    type DistrictDedupedTotals,
     type SchoolReportGroup
 } from '../../lib/districtAdmin';
 // `escapeHtml` converts special HTML characters (like `<`, `>`, `&`) in
@@ -100,6 +111,10 @@ export default function AdminReports() {
     // gates the whole screen behind a spinner so nothing renders with
     // stale/blank values.
     const [loading, setLoading] = useState(true);
+    // `refreshing`: true only while a pull-to-refresh is in progress --
+    // drives the native RefreshControl spinner without hiding the already-
+    // loaded preview card the way `loading` does.
+    const [refreshing, setRefreshing] = useState(false);
     // `exporting`: true only while a PDF is actively being generated --
     // disables the export button and swaps its label to "Generating
     // Report..." so a user can't double-tap and kick off two exports at once.
@@ -115,6 +130,12 @@ export default function AdminReports() {
     // a school name plus the list of classes belonging to it) -- this is the
     // shape the exported PDF's per-school sections are built from.
     const [schoolGroups, setSchoolGroups] = useState<SchoolReportGroup[]>([]);
+    // `districtTotals`: the district-wide student count AND total miles,
+    // already deduped server-side for students enrolled in more than one
+    // class (unlike summing `rows`' per-class `memberCount`/`totalMiles`).
+    // Kept in state, alongside `rows`, since `computeDistrictTotals` is
+    // called again both in `handleExportPDF` and on every render below.
+    const [districtTotals, setDistrictTotals] = useState<DistrictDedupedTotals>({ studentCount: 0, totalMiles: 0 });
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     // Loads everything this screen needs: this admin's own district id (from
@@ -161,18 +182,48 @@ export default function AdminReports() {
             // `fetchDistrictAdminClassReport` (lib/districtAdmin.ts) calls a
             // Supabase RPC/function that returns one pre-aggregated row per
             // class in this district -- the client never receives
-            // individual student rows, only class-level totals. `groupBySchool`
-            // then buckets those class rows by school for the per-school
-            // sections of the exported PDF.
-            const classRows = await fetchDistrictAdminClassReport(districtId);
+            // individual student rows, only class-level totals.
+            //
+            // `schoolGroups` (below) additionally merges in every
+            // registered school with zero classes yet, via the same
+            // fetchDistrictSchoolRegistry/mergeWithSchoolRegistry helpers
+            // schools.tsx uses -- this export used to silently omit those
+            // schools entirely (only `groupBySchool(classRows)`, no
+            // registry), so the "Schools Overview" table in an official
+            // district PDF undercounted the district's real school total
+            // with no indication it was a subset. Caught by an /impeccable
+            // critique. `totals` (computed below from `rows` alone, not
+            // `schoolGroups`) intentionally stays scoped to schools with
+            // actual reporting activity -- the same "Schools Reporting"
+            // metric Overview's KPI tile shows -- so the two numbers can
+            // legitimately differ without disagreeing: one counts active
+            // schools, the other lists every registered one.
+            const [classRows, registryNames, schoolTotals, fetchedDistrictTotals] = await Promise.all([
+                fetchDistrictAdminClassReport(districtId),
+                fetchDistrictSchoolRegistry(districtId),
+                fetchDistrictAdminSchoolTotals(districtId),
+                fetchDistrictAdminTotals(districtId),
+            ]);
             setRows(classRows);
-            setSchoolGroups(groupBySchool(classRows));
+            setDistrictTotals(fetchedDistrictTotals);
+            // `schoolTotals` corrects each school's student count and total
+            // miles for students enrolled in more than one class at that
+            // school (groupBySchool would otherwise double-count them by
+            // summing per-class values).
+            setSchoolGroups(mergeWithSchoolRegistry(groupBySchool(classRows, schoolTotals), registryNames));
         } catch (err: any) {
-            setErrorMessage(err?.message || 'Could not load report data.');
+            // Plain-language message only -- the raw err.message (Postgres/
+            // Supabase-shaped) used to be shown verbatim to a principal or
+            // superintendent with no technical context. Logged for
+            // debugging instead. Caught by an /impeccable critique.
+            console.error('Failed to load report data:', err);
+            setErrorMessage('Could not load report data. Please try again.');
         } finally {
-            // Always clear the loading flag, whether the fetch succeeded or
-            // failed, so the spinner never gets stuck on screen.
+            // Always clear both loading flags, whether the fetch succeeded
+            // or failed, so neither the first-load spinner nor a pull-to-
+            // refresh spinner gets stuck on screen.
             setLoading(false);
+            setRefreshing(false);
         }
     }, []);
 
@@ -185,6 +236,14 @@ export default function AdminReports() {
             void loadData();
         }, [loadData])
     );
+
+    // Event handler wired to the ScrollView's RefreshControl below: fired
+    // when the user pulls down on the list. Shows the refresh spinner, then
+    // re-runs the same load function used on focus.
+    const onRefresh = () => {
+        setRefreshing(true);
+        void loadData();
+    };
 
     // Event handler for the "Export District Report PDF" button. Builds a
     // complete, self-contained HTML document (district totals table, a
@@ -202,8 +261,10 @@ export default function AdminReports() {
             // Recompute the district-wide totals (schools/classes/students/
             // miles/fitness rates) from the raw class rows -- same helper
             // used by overview.tsx, kept in lib/districtAdmin.ts so both
-            // screens stay consistent.
-            const totals = computeDistrictTotals(rows);
+            // screens stay consistent. `districtTotals` (already deduped
+            // server-side) overrides the per-class-summed student count and
+            // total miles.
+            const totals = computeDistrictTotals(rows, districtTotals);
 
             // Build the "Schools Overview" table's row markup: one `<tr>`
             // per school, sorted by student count descending (schools with
@@ -215,8 +276,23 @@ export default function AdminReports() {
             const schoolRowsHtml = schoolGroups
                 .slice()
                 .sort((a, b) => b.memberCount - a.memberCount)
-                .map((s) => `
-                    <tr style="border-bottom: 1px solid #ddd;">
+                // A registered school with zero active classes yet
+                // (isEmptyInvitation, from mergeWithSchoolRegistry) gets a
+                // distinct, muted "not yet active" row instead of raw
+                // zeroed stat cells -- a bare "0%" Fitness Participation
+                // cell next to real schools' real percentages reads as a
+                // poor participation RATE rather than "no students
+                // enrolled at all," and the in-app Schools tab already
+                // gives these schools reassuring "candidate for outreach"
+                // framing (schools.tsx) that this export never carried
+                // over. Caught by an /impeccable critique.
+                .map((s) => s.isEmptyInvitation ? `
+                    <tr style="border-bottom: 1px solid #EAE0D5;">
+                        <td style="padding: 10px; font-weight: bold;">${escapeHtml(s.schoolName)}</td>
+                        <td colspan="5" style="padding: 10px; color:#6A6A6A; font-style:italic;">No active classes yet — a candidate for outreach.</td>
+                    </tr>
+                ` : `
+                    <tr style="border-bottom: 1px solid #EAE0D5;">
                         <td style="padding: 10px; font-weight: bold;">${escapeHtml(s.schoolName)}</td>
                         <td style="padding: 10px; text-align: center;">${s.classes.length}</td>
                         <td style="padding: 10px; text-align: center;">${s.memberCount}</td>
@@ -243,9 +319,9 @@ export default function AdminReports() {
                         .slice()
                         .sort((a, b) => b.memberCount - a.memberCount)
                         .map((c) => `
-                            <tr style="border-bottom: 1px solid #ddd;">
+                            <tr style="border-bottom: 1px solid #EAE0D5;">
                                 <td style="padding: 8px; font-weight: bold;">${escapeHtml(c.className)}</td>
-                                <td style="padding: 8px; color:#666;">${escapeHtml(c.teacherName)}</td>
+                                <td style="padding: 8px; color:#6A6A6A;">${escapeHtml(c.teacherName)}</td>
                                 <td style="padding: 8px; text-align: center;">${c.memberCount}</td>
                                 <td style="padding: 8px; text-align: right;">${formatMiles(c.totalMiles)} mi</td>
                                 <td style="padding: 8px; text-align: center;">${pct(c.fitnessParticipants, c.memberCount)}</td>
@@ -263,7 +339,7 @@ export default function AdminReports() {
                             <thead>
                                 <tr><th>Class</th><th>Teacher</th><th style="text-align:center;">Students</th><th style="text-align:right;">Miles</th><th style="text-align:center;">Fitness Participation</th><th style="text-align:center;">Targets Met</th></tr>
                             </thead>
-                            <tbody>${classRowsHtml || `<tr><td colspan="6" style="padding:10px; color:#999; font-style:italic;">No classes reporting at this school yet.</td></tr>`}</tbody>
+                            <tbody>${classRowsHtml || `<tr><td colspan="6" style="padding:10px; color:#6A6A6A; font-style:italic;">No classes reporting at this school yet.</td></tr>`}</tbody>
                         </table>
                     `;
                 }).join('');
@@ -277,15 +353,15 @@ export default function AdminReports() {
             // Print.printAsync below.
             const htmlContent = `
                 <html>
-                    <head><style>body{font-family:sans-serif; padding:20px;} table{width:100%; border-collapse:collapse; margin-bottom: 20px;} th{background:#f4f4f4; padding:8px; text-align:left; font-size:12px;} h2{margin-bottom:4px;} h3{margin-top:24px; margin-bottom:8px; color:#4E3629;}</style></head>
+                    <head><style>body{font-family:sans-serif; padding:20px;} table{width:100%; border-collapse:collapse; margin-bottom: 20px;} th{background:#F6EFE7; padding:8px; text-align:left; font-size:13px;} h2{margin-bottom:4px;} h3{margin-top:24px; margin-bottom:8px; color:#241E18;}</style></head>
                     <body>
                         <h2>District Fitness &amp; Activity Report</h2>
                         <p><b>District:</b> ${escapeHtml(districtName)} &middot; <b>Date:</b> ${new Date().toLocaleDateString()}</p>
-                        <p style="font-size:12px; color:#666;">Every figure below is a class, school, or district aggregate — this report contains no individual student names or ids.</p>
+                        <p style="font-size:13px; color:#6A6A6A;">Every figure below is a class, school, or district aggregate — this report contains no individual student names or ids.</p>
 
                         <h3 style="margin-top:0;">District Totals</h3>
                         <table>
-                            <thead><tr><th>Schools Reporting</th><th>Active Classes</th><th>Students Participating</th><th>Total Miles</th><th>Fitness Participation</th><th>Fitness Targets Met</th></tr></thead>
+                            <thead><tr><th>Active Schools Reporting</th><th>Active Classes</th><th>Students Participating</th><th>Total Miles</th><th>Fitness Participation</th><th>Fitness Targets Met</th></tr></thead>
                             <tbody>
                                 <tr>
                                     <td style="padding:10px;">${totals.schoolCount}</td>
@@ -299,9 +375,10 @@ export default function AdminReports() {
                         </table>
 
                         <h3>Schools Overview</h3>
+                        <p style="font-size:13px; color:#6A6A6A; margin-top:-8px;">Every registered school in the district, including any with no active classes yet — a larger list than "Active Schools Reporting" above, which counts only schools with real activity.</p>
                         <table>
                             <thead><tr><th>School</th><th style="text-align:center;">Classes</th><th style="text-align:center;">Students</th><th style="text-align:right;">Miles</th><th style="text-align:center;">Fitness Participation</th><th style="text-align:center;">Targets Met</th></tr></thead>
-                            <tbody>${schoolRowsHtml || `<tr><td colspan="6" style="padding:10px; color:#999; font-style:italic;">No schools reporting yet.</td></tr>`}</tbody>
+                            <tbody>${schoolRowsHtml || `<tr><td colspan="6" style="padding:10px; color:#6A6A6A; font-style:italic;">No schools reporting yet.</td></tr>`}</tbody>
                         </table>
 
                         ${schoolSectionsHtml}
@@ -327,9 +404,14 @@ export default function AdminReports() {
                 const printWindow = window.open('', '_blank');
                 if (!printWindow) {
                     // `window.open` returns `null` if the browser's pop-up
-                    // blocker intercepted it -- surface a clear error
-                    // instead of silently doing nothing.
-                    throw new Error('Could not open the print window. Check if your browser is blocking pop-ups for this site.');
+                    // blocker intercepted it -- surface a clear, specific,
+                    // already-actionable message directly here (rather than
+                    // throwing into the generic catch below, which now
+                    // shows a deliberately generic message for anything it
+                    // doesn't recognize) so this one predictable, common
+                    // case keeps its precise guidance.
+                    showAlert('Export Failed', 'Could not open the print window. Check if your browser is blocking pop-ups for this site.');
+                    return;
                 }
                 // Write the generated HTML string directly into the new
                 // window's document, then close it (required after
@@ -343,18 +425,37 @@ export default function AdminReports() {
                 // actually render before the browser's print dialog opens
                 // and takes a "snapshot" of the page.
                 setTimeout(() => printWindow.print(), 250);
+                // Confirms the report generated and the print dialog
+                // opened -- deliberately NOT "your report was printed",
+                // since there's no reliable signal from window.print() of
+                // what the admin does with that dialog (save as PDF,
+                // print, or cancel). Before this, the ONLY feedback after
+                // tapping Export was the button's label reverting -- the
+                // single highest-stakes action in this shell ended in
+                // near-silence. Caught by an /impeccable critique.
+                showAlert('Report Ready', 'Your district report opened in the print dialog.');
             } else {
                 // On iOS/Android, `Print.printAsync` hands the HTML string
                 // straight to the native OS print/share sheet -- no manual
-                // window management needed here.
+                // window management needed here. It resolves once that
+                // sheet's interaction finishes.
                 await Print.printAsync({ html: htmlContent });
+                showAlert('Report Ready', 'Your district report was sent to the print/share sheet.');
             }
         } catch (error: any) {
-            // Covers both a thrown pop-up-blocked error above and any
-            // failure from Print.printAsync -- shown via the cross-platform
-            // showAlert helper (a plain Alert.alert would be a silent no-op
-            // on web).
-            showAlert('Export Failed', error.message);
+            // Catches anything NOT already handled above (the pop-up-
+            // blocked case now shows its own specific message and returns
+            // early) -- typically a Print.printAsync failure. Plain-
+            // language message only, not the raw error.message -- this is
+            // the single highest-stakes action in this shell, and every
+            // other failure path here was already rewritten to avoid
+            // showing a raw Postgres/print-internals string to a non-
+            // technical superintendent or reading it aloud verbatim to a
+            // screen-reader user; this handler was the one place that
+            // pattern hadn't been applied yet. Caught by an /impeccable
+            // critique.
+            console.error('Failed to export district report:', error);
+            showAlert('Export Failed', 'Could not generate the report. Please try again.');
         } finally {
             // Always clear the exporting flag so the button re-enables and
             // its label reverts, whether the export succeeded or failed.
@@ -375,57 +476,101 @@ export default function AdminReports() {
     // Recomputed on every render (not memoized) from whatever `rows` is
     // currently in state -- cheap enough given how few rows a single
     // district's class list typically has, and it needs to reflect the
-    // latest `rows` after every refresh.
-    const totals = computeDistrictTotals(rows);
+    // latest `rows` after every refresh. `districtTotals` (already deduped
+    // server-side) overrides the per-class-summed student count and total
+    // miles.
+    const totals = computeDistrictTotals(rows, districtTotals);
 
     return (
         <View style={{ flex: 1, backgroundColor: theme.background }}>
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 24, paddingBottom: 40 }} showsVerticalScrollIndicator={false}>
-                <Text style={[styles.kicker, { color: theme.accent }]}>DISTRICT REPORT</Text>
-                <Text style={[styles.title, { color: theme.text }]} accessibilityRole="header">{districtName}</Text>
-                <Text style={[styles.subtitle, { color: theme.subtext }]}>
-                    Export a printable summary of Presidential Fitness Test completion and activity across every school in your district.
-                </Text>
-
-                {/* Conditional render: only shown if a fetch failed and
-                    set an error message -- otherwise this renders nothing
-                    (React skips `false`/`null`/`undefined` children). */}
-                {errorMessage && <Text style={styles.errorText}>{errorMessage}</Text>}
-
-                {/* A preview card describing exactly what the PDF will
-                    contain before the admin taps "Export" -- sets
-                    expectations and reiterates the privacy guarantee (no
-                    student-level data) up front. Counts (school/class
-                    totals) are pulled live from state so they always match
-                    what will actually be exported. */}
-                <View style={[styles.previewCard, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}>
-                    <Text style={[styles.previewHeading, { color: theme.text }]}>Report will include</Text>
-                    <Text style={[styles.previewLine, { color: theme.subtext }]}>• District totals: schools, classes, students, miles, fitness participation and pass rate</Text>
-                    <Text style={[styles.previewLine, { color: theme.subtext }]}>• One summary row per school ({schoolGroups.length} school{schoolGroups.length === 1 ? '' : 's'})</Text>
-                    <Text style={[styles.previewLine, { color: theme.subtext }]}>• One table per school listing its classes ({totals.classCount} class{totals.classCount === 1 ? '' : 'es'} total)</Text>
-                    <Text style={[styles.previewLine, { color: theme.subtext, fontStyle: 'italic', marginTop: 8 }]}>No student names, ids, or per-student rows are included anywhere in this export.</Text>
+            <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ padding: 24, paddingBottom: 40 }}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.accent]} />}
+                showsVerticalScrollIndicator={false}
+            >
+                {/* No kicker/eyebrow above the title -- see overview.tsx's
+                    identical titleRow for the full reasoning. No subtitle
+                    line below it either -- an intermediate version here
+                    restated the school count in small gray text, which was
+                    redundant with the "Report will include" preview card
+                    just below (same count, spelled out in full) and read
+                    as filler commentary. Caught by user feedback. */}
+                <View style={styles.titleRow}>
+                    <View style={[styles.titleIconBadge, { backgroundColor: theme.accent + '18' }]}>
+                        <Ionicons name="documents-sharp" size={18} color={theme.accent} />
+                    </View>
+                    <Text style={[styles.title, { color: theme.text }]} accessibilityRole="header">{districtName}</Text>
                 </View>
 
-                {/* `TourTarget` wraps this button so the onboarding tour
-                    (see components/OnboardingTour.tsx) can find and
-                    highlight it by the id "admin.exportButton". The button
-                    itself is disabled while exporting or when there's no
-                    data at all, and its label/opacity change to reflect
-                    that state. */}
-                <TourTarget id="admin.exportButton">
-                    <Pressable
-                        style={({ pressed }) => [styles.exportButton, { backgroundColor: theme.accent, opacity: pressed || exporting || rows.length === 0 ? 0.7 : 1 }]}
-                        onPress={() => void handleExportPDF()}
-                        disabled={exporting || rows.length === 0}
-                        accessibilityRole="button"
-                    >
-                        <Text style={styles.exportButtonText}>{exporting ? 'Generating Report...' : 'Export District Report PDF'}</Text>
-                    </Pressable>
-                </TourTarget>
-                {/* Conditional render: an explanatory empty-state message
-                    shown only when there's genuinely nothing to export yet. */}
-                {rows.length === 0 && (
-                    <Text style={styles.emptyText}>No class data reporting in your district yet — nothing to export.</Text>
+                {/* Error and "genuinely nothing to export yet" used to be
+                    stacked: a real fetch failure left `rows` at its zeroed
+                    default, so the preview card below would show "0
+                    schools / 0 classes" and the disabled export button's
+                    "nothing to export yet" caption right underneath the
+                    error text -- reading as a real empty state rather than
+                    a failure. Caught by an /impeccable critique. */}
+                {errorMessage ? (
+                    <View style={[styles.previewCard, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}>
+                        <Text style={[styles.previewHeading, { color: theme.error }]}>Could not load report data</Text>
+                        <Text style={[styles.previewLine, { color: theme.subtext }]}>{errorMessage}</Text>
+                        <Pressable
+                            onPress={() => void loadData()}
+                            style={{ alignSelf: 'flex-start', marginTop: 12, paddingVertical: 13, paddingHorizontal: 18, borderRadius: 10, borderWidth: 1, borderColor: theme.accent }}
+                            accessibilityRole="button"
+                        >
+                            <Text style={{ color: theme.accent, fontWeight: '600', fontSize: 14, fontFamily: 'Georgia' }}>Try Again</Text>
+                        </Pressable>
+                    </View>
+                ) : (
+                    <>
+                        {/* A preview card describing exactly what the PDF
+                            will contain before the admin taps "Export" --
+                            sets expectations and reiterates the privacy
+                            guarantee (no student-level data) up front.
+                            Counts (school/class totals) are pulled live
+                            from state so they always match what will
+                            actually be exported. */}
+                        <View style={[styles.previewCard, { backgroundColor: theme.surface, borderColor: theme.border, shadowColor: theme.shadow }]}>
+                            <Text style={[styles.previewHeading, { color: theme.text }]}>Report will include</Text>
+                            <Text style={[styles.previewLine, { color: theme.subtext }]}>• District totals: schools, classes, students, miles, fitness participation and pass rate</Text>
+                            <Text style={[styles.previewLine, { color: theme.subtext }]}>• One summary row per school ({schoolGroups.length} school{schoolGroups.length === 1 ? '' : 's'})</Text>
+                            <Text style={[styles.previewLine, { color: theme.subtext }]}>• One table per school listing its classes ({totals.classCount} class{totals.classCount === 1 ? '' : 'es'} total)</Text>
+                            <Text style={[styles.previewLine, { color: theme.subtext, fontStyle: 'italic', marginTop: 8 }]}>No student names, ids, or per-student rows are included anywhere in this export.</Text>
+                            {/* The PDF itself already carries a "Date:"
+                                line, but nothing on-screen told the admin
+                                BEFORE exporting that this is always a live,
+                                all-time cumulative snapshot rather than a
+                                report scoped to a specific term -- worth
+                                knowing before, not just after, generating
+                                it. Caught by an /impeccable critique. */}
+                            <Text style={[styles.previewLine, { color: theme.subtext, fontStyle: 'italic' }]}>Reflects all-time totals as of {new Date().toLocaleDateString()}, not a specific grading period.</Text>
+                        </View>
+
+                        {/* `TourTarget` wraps this button so the onboarding
+                            tour (see components/OnboardingTour.tsx) can
+                            find and highlight it by the id
+                            "admin.exportButton". The button itself is
+                            disabled while exporting or when there's no data
+                            at all, and its label/opacity change to reflect
+                            that state. */}
+                        <TourTarget id="admin.exportButton">
+                            <Pressable
+                                style={({ pressed }) => [styles.exportButton, { backgroundColor: theme.accent, opacity: pressed || exporting || rows.length === 0 ? 0.7 : 1 }]}
+                                onPress={() => void handleExportPDF()}
+                                disabled={exporting || rows.length === 0}
+                                accessibilityRole="button"
+                            >
+                                <Text style={styles.exportButtonText}>{exporting ? 'Generating Report...' : 'Export District Report PDF'}</Text>
+                            </Pressable>
+                        </TourTarget>
+                        {/* Conditional render: an explanatory empty-state
+                            message shown only when there's genuinely
+                            nothing to export yet. */}
+                        {rows.length === 0 && (
+                            <Text style={styles.emptyText}>No class data reporting in your district yet — nothing to export.</Text>
+                        )}
+                    </>
                 )}
             </ScrollView>
         </View>
@@ -436,20 +581,24 @@ export default function AdminReports() {
 // current theme's colors into the returned stylesheet -- called once near
 // the top of the component on every render.
 // -- layout style: centers the loading spinner --
-// -- header text styles: the small accent "kicker" label, the big district
-//    name title, and the subtitle beneath it --
+// -- header text styles: the title icon badge and the big district name title --
 const getStyles = (theme: Theme) => StyleSheet.create({
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    kicker: { fontSize: 11, letterSpacing: 1.2, fontWeight: '800', marginBottom: 6 },
-    title: { fontSize: 26, fontWeight: '800', marginBottom: 4, fontFamily: 'Georgia' },
-    subtitle: { fontSize: 13, lineHeight: 18, marginBottom: 20 },
-    errorText: { color: theme.error, fontSize: 13, marginBottom: 16 },
+    // Replaces the old standalone "kicker" eyebrow label above the title --
+    // see overview.tsx's identical titleRow for the full reasoning.
+    // marginBottom: 24 replaces the spacing a subtitle line used to
+    // provide -- there's no subtitle anymore, just this row followed
+    // directly by the preview card.
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 24 },
+    // Same accent-tinted circular badge as overview.tsx/schools.tsx.
+    titleIconBadge: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+    title: { fontSize: 26, fontWeight: '800', fontFamily: 'Georgia' },
     // -- "Report will include" preview card styles --
     previewCard: { borderWidth: 1, borderRadius: 16, padding: 18, marginBottom: 24, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 8, elevation: 2 },
     previewHeading: { fontSize: 15, fontWeight: '700', fontFamily: 'Georgia', marginBottom: 10 },
     previewLine: { fontSize: 13, lineHeight: 19, marginBottom: 4 },
     // -- export button + empty-state text styles --
     exportButton: { paddingVertical: 16, borderRadius: 14, alignItems: 'center' },
-    exportButtonText: { color: theme.accentText, fontSize: 15, fontWeight: '700' },
+    exportButtonText: { color: theme.accentText, fontSize: 15, fontWeight: '700', fontFamily: 'Georgia' },
     emptyText: { color: theme.subtext, fontSize: 13, fontStyle: 'italic', textAlign: 'center', marginTop: 14 },
 });

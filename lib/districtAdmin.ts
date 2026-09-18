@@ -118,6 +118,15 @@ export type SchoolReportGroup = {
     isEmptyInvitation?: boolean;
 };
 
+// One school's true, deduped-across-classes totals -- `count(distinct
+// user_id)` and each distinct student's `total_miles_walked` summed once,
+// from get_district_admin_school_totals. See groupBySchool's
+// `schoolTotals` param for why this replaces the naive per-class sum.
+export type SchoolDedupedTotals = {
+    memberCount: number;
+    totalMiles: number;
+};
+
 /**
  * Groups a flat list of per-class report rows into one summary per school,
  * summing each school's numeric fields across its classes.
@@ -125,6 +134,15 @@ export type SchoolReportGroup = {
  * @param rows - The ClassReportRow[] returned by
  *   fetchDistrictAdminClassReport (or any equivalent array -- this
  *   function is pure and doesn't care where the rows came from).
+ * @param schoolTotals - Optional, from
+ *   fetchDistrictAdminSchoolTotals(districtId). When given, each group's
+ *   `memberCount` and `totalMiles` are replaced with these true (deduped-
+ *   across-classes) values instead of the sum of its classes' already-per-
+ *   class-deduped numbers, which double-counts any student enrolled in more
+ *   than one class at that school (both their membership AND their whole
+ *   lifetime `total_miles_walked`, added once per class they're in). A
+ *   school missing from this map (shouldn't normally happen -- it's keyed
+ *   the same way as `rows`) keeps its summed values as a fallback.
  * @returns An array of SchoolReportGroup, one per distinct `schoolName`
  *   found in `rows`, sorted DESCENDING by `memberCount` (schools with more
  *   enrolled students appear first). A school with zero classes never
@@ -132,10 +150,10 @@ export type SchoolReportGroup = {
  *   see isEmptyInvitation above for how "recruit" schools with no classes
  *   are handled separately, elsewhere in the calling screen.
  *
- * No side effects -- pure aggregation over the passed-in array, no network
- * calls.
+ * No side effects -- pure aggregation over the passed-in arguments, no
+ * network calls.
  */
-export function groupBySchool(rows: ClassReportRow[]): SchoolReportGroup[] {
+export function groupBySchool(rows: ClassReportRow[], schoolTotals?: Map<string, SchoolDedupedTotals>): SchoolReportGroup[] {
     // Map keyed by schoolName, built up incrementally as `rows` is walked
     // once. Using a Map (not a plain object) sidesteps any issues with
     // school names that happen to collide with Object.prototype property
@@ -164,9 +182,170 @@ export function groupBySchool(rows: ClassReportRow[]): SchoolReportGroup[] {
         group.fitnessParticipants += row.fitnessParticipants;
         group.walkLogEntries += row.walkLogEntries;
     }
+    // Replace each school's summed (potentially double-counted) memberCount
+    // and totalMiles with their true deduped values, when available.
+    if (schoolTotals) {
+        for (const group of groups.values()) {
+            const deduped = schoolTotals.get(group.schoolName);
+            if (deduped) {
+                group.memberCount = deduped.memberCount;
+                group.totalMiles = deduped.totalMiles;
+            }
+        }
+    }
+
     // Sort schools largest-enrollment-first so the report reads
     // biggest-impact-first rather than in arbitrary insertion order.
     return [...groups.values()].sort((a, b) => b.memberCount - a.memberCount);
+}
+
+/**
+ * Fetches each school's true, deduped-across-classes totals (student count
+ * AND total miles) -- both computed server-side over each student exactly
+ * once, unlike summing each school's classes' `memberCount`/`totalMiles`
+ * (which double-counts a student enrolled in more than one class at the
+ * same school -- their membership AND their whole lifetime
+ * `total_miles_walked`, once per class).
+ *
+ * @param districtId - Which district to report on. Empty string
+ *   short-circuits to an empty Map with no network call.
+ * @returns A Map from `school_name` (defaulting to 'Unassigned School',
+ *   matching fetchDistrictAdminClassReport's convention) to that school's
+ *   SchoolDedupedTotals.
+ * @throws The raw Supabase error if the RPC call fails.
+ *
+ * Side effect: calls the `get_district_admin_school_totals` Postgres
+ * function (read-only).
+ */
+export async function fetchDistrictAdminSchoolTotals(districtId: string): Promise<Map<string, SchoolDedupedTotals>> {
+    if (!districtId) return new Map();
+
+    const { data, error } = await supabase.rpc('get_district_admin_school_totals', {
+        target_district_id: districtId,
+    });
+    if (error) throw error;
+
+    return new Map(
+        ((data ?? []) as any[]).map((row) => [
+            row.school_name || 'Unassigned School',
+            { memberCount: Number(row.member_count || 0), totalMiles: Number(row.total_miles || 0) },
+        ])
+    );
+}
+
+// The district's true, deduped-across-classes totals -- see
+// SchoolDedupedTotals above, same idea at the whole-district grain.
+export type DistrictDedupedTotals = {
+    studentCount: number;
+    totalMiles: number;
+};
+
+/**
+ * Fetches the true, deduped-across-classes totals (student count AND total
+ * miles) for an entire district -- both computed server-side over each
+ * student exactly once, unlike summing every class's
+ * `memberCount`/`totalMiles` (which double-counts a student enrolled in
+ * more than one class anywhere in the district).
+ *
+ * @param districtId - Which district to report on. Empty string
+ *   short-circuits to `{ studentCount: 0, totalMiles: 0 }` with no network
+ *   call.
+ * @returns The district's DistrictDedupedTotals.
+ * @throws The raw Supabase error if the RPC call fails.
+ *
+ * Side effect: calls the `get_district_admin_totals` Postgres function
+ * (read-only).
+ */
+export async function fetchDistrictAdminTotals(districtId: string): Promise<DistrictDedupedTotals> {
+    if (!districtId) return { studentCount: 0, totalMiles: 0 };
+
+    const { data, error } = await supabase.rpc('get_district_admin_totals', {
+        target_district_id: districtId,
+    });
+    if (error) throw error;
+
+    const row = ((data ?? []) as any[])[0];
+    return { studentCount: Number(row?.member_count || 0), totalMiles: Number(row?.total_miles || 0) };
+}
+
+/**
+ * Fetches every school NAME registered in a district's `schools_registry`
+ * table, sorted alphabetically -- the full set of known schools, whether or
+ * not any of them have actual class/reporting activity yet.
+ *
+ * @param districtId - Which district's registry to read. Empty string
+ *   short-circuits to `[]` with no network call, same convention as
+ *   fetchDistrictAdminClassReport.
+ * @returns An array of school name strings.
+ * @throws The raw Supabase error if the query fails.
+ */
+export async function fetchDistrictSchoolRegistry(districtId: string): Promise<string[]> {
+    if (!districtId) return [];
+
+    const { data, error } = await supabase
+        .from('schools_registry')
+        .select('school_name')
+        .eq('district_id', districtId)
+        .order('school_name', { ascending: true });
+    if (error) throw error;
+
+    return (data || []).map((r) => r.school_name).filter((name): name is string => !!name);
+}
+
+/**
+ * Merges a district's registered school names into an already-grouped
+ * `SchoolReportGroup[]` (from groupBySchool), so a school with zero
+ * classes/students yet still appears -- as a zeroed-out row flagged
+ * `isEmptyInvitation: true` -- instead of silently disappearing because
+ * there's no class-report row to group it under.
+ *
+ * Extracted here (rather than left inline in one screen) after an
+ * /impeccable critique caught `(admin-tabs)/reports.tsx`'s PDF export
+ * omitting every zero-participation school that `(admin-tabs)/schools.tsx`
+ * already showed -- two screens describing the same district's school
+ * count differently because the merge only existed in one of them. Both
+ * screens now call this one function.
+ *
+ * @param activeGroups - The result of `groupBySchool(rows)` -- schools that
+ *   have at least one class already.
+ * @param registrySchoolNames - Every school name in the district's
+ *   registry (from fetchDistrictSchoolRegistry), regardless of activity.
+ * @returns Every registered school, merged: a registry name that matches
+ *   an active group (case/whitespace-insensitively) keeps its real data;
+ *   one with no match becomes a zeroed `isEmptyInvitation: true` row. Any
+ *   active group whose name never matched a registry entry (a class's
+ *   school_name typo that doesn't exactly match the registry) is still
+ *   included via the leftover-values step. Sorted by memberCount
+ *   descending, ties broken alphabetically.
+ *
+ * No side effects -- pure merge over the two passed-in arrays.
+ */
+export function mergeWithSchoolRegistry(activeGroups: SchoolReportGroup[], registrySchoolNames: string[]): SchoolReportGroup[] {
+    const groupsByNormalizedName = new Map(activeGroups.map((g) => [g.schoolName.trim().toLowerCase(), g]));
+
+    const merged: SchoolReportGroup[] = registrySchoolNames.map((name) => {
+        const normalized = name.trim().toLowerCase();
+        const match = groupsByNormalizedName.get(normalized);
+        if (match) {
+            groupsByNormalizedName.delete(normalized);
+            return match;
+        }
+        return {
+            schoolName: name,
+            classes: [],
+            memberCount: 0,
+            totalMiles: 0,
+            fitnessEntries: 0,
+            fitnessTargetsMet: 0,
+            fitnessParticipants: 0,
+            walkLogEntries: 0,
+            isEmptyInvitation: true,
+        };
+    });
+    merged.push(...groupsByNormalizedName.values());
+
+    merged.sort((a, b) => b.memberCount - a.memberCount || a.schoolName.localeCompare(b.schoolName));
+    return merged;
 }
 
 // A single, district-wide rollup: every ClassReportRow's numeric fields
@@ -198,13 +377,21 @@ export type DistrictTotals = {
  *
  * @param rows - The ClassReportRow[] to summarize (typically the full
  *   result of fetchDistrictAdminClassReport for one district).
+ * @param districtTotals - Optional, from
+ *   fetchDistrictAdminTotals(districtId). When given, replaces the sum of
+ *   every class's already-per-class-deduped `memberCount`/`totalMiles`
+ *   (which double-counts a student enrolled in more than one class anywhere
+ *   in the district -- their membership AND their whole lifetime
+ *   `total_miles_walked`, once per class) with these true district-wide
+ *   deduped values. `fitnessParticipationRate` is derived from whichever
+ *   student count is used.
  * @returns A DistrictTotals object. `fitnessParticipationRate` is `0`
  *   (rather than NaN from a division by zero) when `studentCount` is 0;
  *   `fitnessPassRate` is likewise `0` when `fitnessEntries` is 0.
  *
  * No side effects -- pure aggregation, no network calls.
  */
-export function computeDistrictTotals(rows: ClassReportRow[]): DistrictTotals {
+export function computeDistrictTotals(rows: ClassReportRow[], districtTotals?: DistrictDedupedTotals): DistrictTotals {
     // Count distinct school names via a Set -- schoolCount is "how many
     // different schools appear in these rows", not the number of rows.
     const schoolCount = new Set(rows.map((r) => r.schoolName)).size;
@@ -224,13 +411,21 @@ export function computeDistrictTotals(rows: ClassReportRow[]): DistrictTotals {
         { studentCount: 0, totalMiles: 0, fitnessEntries: 0, fitnessTargetsMet: 0, fitnessParticipants: 0, walkLogEntries: 0 }
     );
 
-    // Spread the summed `totals` fields in, then add the two derived rates,
-    // each guarded against a divide-by-zero producing NaN.
+    // Use the true, deduped district-wide values when the caller has them;
+    // otherwise fall back to the (potentially double-counted) per-class sums.
+    const studentCount = districtTotals?.studentCount ?? totals.studentCount;
+    const totalMiles = districtTotals?.totalMiles ?? totals.totalMiles;
+
+    // Spread the summed `totals` fields in, then overwrite `studentCount`/
+    // `totalMiles` and add the two derived rates, each guarded against a
+    // divide-by-zero producing NaN.
     return {
         schoolCount,
         classCount: rows.length,
         ...totals,
-        fitnessParticipationRate: totals.studentCount > 0 ? totals.fitnessParticipants / totals.studentCount : 0,
+        studentCount,
+        totalMiles,
+        fitnessParticipationRate: studentCount > 0 ? totals.fitnessParticipants / studentCount : 0,
         fitnessPassRate: totals.fitnessEntries > 0 ? totals.fitnessTargetsMet / totals.fitnessEntries : 0,
     };
 }

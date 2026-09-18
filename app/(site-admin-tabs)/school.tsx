@@ -110,6 +110,11 @@ export default function SiteAdminSchool() {
     const [districtName, setDistrictName] = useState('Your District');
     // The loaded, already-grouped-by-class data to render.
     const [classes, setClasses] = useState<SiteAdminClassGroup[]>([]);
+    // Distinct student count across the whole school, computed from the raw
+    // per-student rows (see loadSchool below) rather than summed from each
+    // class's `memberCount` -- summing would double-count a student
+    // enrolled in more than one class at this school.
+    const [totalStudents, setTotalStudents] = useState(0);
     // Tracks which class cards are expanded, as a `Set` of class IDs. Using
     // a Set (rather than e.g. one boolean per class) makes it cheap to
     // toggle membership and to check "is this one expanded?" for any class,
@@ -145,6 +150,7 @@ export default function SiteAdminSchool() {
                 // Profile is missing school/district info -- nothing to
                 // report on.
                 setClasses([]);
+                setTotalStudents(0);
                 return;
             }
 
@@ -155,6 +161,10 @@ export default function SiteAdminSchool() {
             // `SiteAdminClassGroup[]` shape this screen renders.
             const rows = await fetchSiteAdminSchoolReport(school, districtId);
             setClasses(groupByClass(rows));
+            // Distinct student count, not one-per-class-membership -- a
+            // student in 2 classes at this school appears as 2 rows in
+            // `rows` (one per class) but should only count once here.
+            setTotalStudents(new Set(rows.map((r) => r.studentId)).size);
         } catch (err: any) {
             showAlert('Load Error', err.message || 'Could not load your school.');
         } finally {
@@ -200,7 +210,9 @@ export default function SiteAdminSchool() {
     // summing across all loaded classes with `Array.reduce`. These aren't
     // stored in state because they're cheap to recompute and always kept
     // in sync with `classes` automatically -- no risk of stale totals.
-    const totalStudents = classes.reduce((sum, c) => sum + c.memberCount, 0);
+    // (`totalStudents` is the exception -- see its own state above, since it
+    // needs the raw per-student rows, not the per-class groups, to dedupe
+    // correctly.)
     const totalMiles = classes.reduce((sum, c) => sum + c.totalMiles, 0);
     const totalFitnessEntries = classes.reduce((sum, c) => sum + c.fitnessEntries, 0);
     const totalFitnessTargetsMet = classes.reduce((sum, c) => sum + c.fitnessTargetsMet, 0);

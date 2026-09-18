@@ -4,10 +4,17 @@
 // run during Metro's SSR pass.
 
 import { View } from 'react-native';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Polyline, CircleMarker, Marker, Popup, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
+
+// CARTO's raster basemap tiles now require a (free) API key -- see
+// EXPO_PUBLIC_CARTO_API_KEY in .env.example. Without one, tiles render with
+// an "API KEY REQUIRED" watermark rather than failing outright.
+const CARTO_API_KEY = process.env.EXPO_PUBLIC_CARTO_API_KEY;
+const CARTO_TILE_URL = `https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png${CARTO_API_KEY ? `?key=${CARTO_API_KEY}` : ''}`;
 
 // Emoji-based divIcons for the start/end flags -- avoids needing Leaflet's
 // default marker image assets (which commonly 404 under bundlers unless
@@ -65,6 +72,89 @@ function RecenterButton({ position, theme }: { position: [number, number]; theme
         </div>
     );
 }
+
+// ─── Fullscreen toggle button ──────────────────────────────────────────────
+
+// FullscreenToggleButton
+// A small floating square button pinned to the top-right corner of the
+// map, letting the student expand it to fill the whole viewport (and
+// collapse it back). Mirrors RecenterButton's styling/positioning above,
+// just at top-right instead of bottom-right so the two never overlap.
+// Must live INSIDE <MapContainer> (like RecenterButton) so useMap() can
+// find the Leaflet map instance -- it needs that instance to force a
+// re-measure after the container's size changes (see the effect below).
+function FullscreenToggleButton({
+    isFullscreen,
+    onToggle,
+    theme,
+}: {
+    isFullscreen: boolean;
+    onToggle: () => void;
+    theme: any;
+}) {
+    const map = useMap();
+
+    // Leaflet caches the pixel size of its container the last time it
+    // measured it, and won't redraw tiles correctly for a container that's
+    // since changed size out from under it. Toggling fullscreen swaps the
+    // outer <View>'s style (see LeafletMap below) instead of resizing this
+    // component itself, so Leaflet never sees that change on its own --
+    // this tells it to re-measure once the new layout has actually applied.
+    useEffect(() => {
+        const id = setTimeout(() => map.invalidateSize(), 0);
+        return () => clearTimeout(id);
+    }, [isFullscreen, map]);
+
+    return (
+        <div
+            style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                zIndex: 1000,
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                backgroundColor: theme.surface,
+                border: `1px solid ${theme.border}`,
+                boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                fontSize: 18,
+                color: theme.accent,
+                userSelect: 'none',
+            }}
+            onClick={onToggle}
+            role="button"
+            aria-label={isFullscreen ? 'Exit fullscreen map' : 'View map fullscreen'}
+            title={isFullscreen ? 'Exit fullscreen' : 'View fullscreen'}
+        >
+            {isFullscreen ? '✕' : '⛶'}
+        </div>
+    );
+}
+
+// The style applied on top of the caller's normal dStyles.mapContainer
+// (via a style array, so these keys simply override the matching ones)
+// while fullscreen is active -- pins the map to the whole viewport above
+// everything else on the page. `position: 'fixed'` isn't part of React
+// Native's ViewStyle type (only 'absolute'/'relative' are), but this file
+// only ever renders on web (see the file-level comment up top), where
+// react-native-web passes it straight through to the underlying <div>.
+const FULLSCREEN_MAP_STYLE: any = {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100vw',
+    height: '100vh',
+    margin: 0,
+    borderRadius: 0,
+    zIndex: 9999,
+};
 
 const toLatLng = (c: { latitude: number; longitude: number }): [number, number] =>
     [c.latitude, c.longitude];
@@ -171,6 +261,30 @@ export default function LeafletMap({
     theme,
     onLandmarkPress,
 }: any) {
+    const [isFullscreen, setIsFullscreen] = useState(false);
+
+    // While fullscreen, stop the page itself from scrolling behind the
+    // map, and let Escape close it -- both standard behavior for
+    // fullscreen-style overlays, and without the scroll lock the page
+    // underneath a `position: fixed` map is still scrollable, which reads
+    // as broken.
+    useEffect(() => {
+        if (!isFullscreen) return;
+
+        const previousOverflow = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setIsFullscreen(false);
+        };
+        window.addEventListener('keydown', onKeyDown);
+
+        return () => {
+            document.body.style.overflow = previousOverflow;
+            window.removeEventListener('keydown', onKeyDown);
+        };
+    }, [isFullscreen]);
+
     const center: [number, number] = trailRegion
         ? [trailRegion.latitude, trailRegion.longitude]
         : toLatLng(userPosition);
@@ -200,8 +314,11 @@ export default function LeafletMap({
     // and unlock before the orange line had actually reached it on the map.
     const passedMile = milesWalked;
 
-    return (
-        <View style={dStyles.mapContainer} accessibilityLabel="Trail map showing your progress and nearby landmarks">
+    const mapView = (
+        <View
+            style={[dStyles.mapContainer, isFullscreen && FULLSCREEN_MAP_STYLE]}
+            accessibilityLabel="Trail map showing your progress and nearby landmarks"
+        >
             <MapContainer
                 center={center}
                 zoom={14}
@@ -211,7 +328,7 @@ export default function LeafletMap({
             >
                 <BoundsUpdater trailCoords={trailCoords} />
                 <TileLayer
-                    url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+                    url={CARTO_TILE_URL}
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
                 />
 
@@ -305,7 +422,23 @@ export default function LeafletMap({
                 </CircleMarker>
 
                 <RecenterButton position={toLatLng(userPosition)} theme={theme} />
+                <FullscreenToggleButton
+                    isFullscreen={isFullscreen}
+                    onToggle={() => setIsFullscreen((current) => !current)}
+                    theme={theme}
+                />
             </MapContainer>
         </View>
     );
+
+    // `position: fixed` (see FULLSCREEN_MAP_STYLE above) only escapes the
+    // dashboard's own `overflow: hidden` map frame -- it does NOT escape an
+    // ancestor with a CSS `transform` set, which becomes a fresh containing
+    // block for any fixed-position descendant per the CSS spec. The
+    // dashboard's surrounding ScrollView (like most React Native Web
+    // scroll containers) sets an identity `transform` on its host div,
+    // which silently confined "fullscreen" to that scroll container's box
+    // instead of the real viewport. Portaling straight to `document.body`
+    // while fullscreen sidesteps that ancestor chain entirely.
+    return isFullscreen ? createPortal(mapView, document.body) : mapView;
 }

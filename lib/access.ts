@@ -9,10 +9,10 @@
 //   2. "Given that role, which app SHELL (a top-level tab-bar layout, e.g.
 //      the `(teacher-tabs)` route group) should we route them into, and
 //      which VIEW inside that shell are they currently looking at?"
-// The "view" concept exists because some roles (teacher, site_admin, okage)
-// can preview what OTHER roles see -- e.g. a Site Administrator can flip
-// their `active_view` to 'classic' to see the app exactly as a student would,
-// without actually being a student. `resolveAppShellPath` is the function
+// The "view" concept exists because some roles (teacher, admin, site_admin,
+// okage) can preview what OTHER roles see -- e.g. a Site Administrator can
+// flip their `active_view` to 'classic' to see the app exactly as a student
+// would, without actually being a student. `resolveAppShellPath` is the function
 // every top-level layout/redirect calls to decide which route group to send
 // a signed-in user into.
 //
@@ -198,11 +198,11 @@ export function resolveAppShellPath(
     // educator sub-type) get their own dedicated shell -- district/school/
     // class-level reporting, never a per-student roster -- rather than
     // falling into the teacher portal like every other non-student/non-
-    // okage role below. No preview-as-teacher/student toggle for this
-    // role -- that capability lives on Site Administrators instead (see
-    // below).
+    // okage role below. Like Site Administrators and OKAGE staff, they can
+    // preview the Student ("classic") experience via the active_view
+    // toggle, to see what their district's students actually see.
     if (role === 'admin') {
-        return '/(admin-tabs)';
+        return view === 'classic' ? '/(tabs)/dashboard' : '/(admin-tabs)';
     }
 
     // Site Administrators (signup.tsx's "Site Administrator" educator
@@ -242,16 +242,13 @@ export function resolveAppShellPath(
  *
  * @param role - The user's actual, resolved AppRole (from getResolvedRole).
  * @returns An array of AppView values this role may pick. An empty array
- *   means the role has no preview toggle at all (e.g. 'student', 'admin').
- *   Note that 'admin' (District Administrator) intentionally returns only
- *   its own single view, per the comment on resolveAppShellPath above: that
- *   role has no preview-as-teacher/student capability.
+ *   means the role has no preview toggle at all (e.g. 'student').
  *
  * No side effects -- pure function, no network calls.
  */
 export function getAllowedTeacherViews(role: AppRole): AppView[] {
     if (role === 'teacher') return ['classic', 'teacher'];
-    if (role === 'admin') return ['admin'];
+    if (role === 'admin') return ['admin', 'classic'];
     if (role === 'site_admin') return ['site_admin', 'teacher', 'classic'];
     if (role === 'professor') return ['professor'];
     if (role === 'super_admin') return ['super_admin'];

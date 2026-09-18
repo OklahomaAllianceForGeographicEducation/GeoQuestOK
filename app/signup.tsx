@@ -394,17 +394,38 @@ export default function SignUp() {
                     // supabase.functions.invoke() surfaces a non-2xx
                     // response as this generic FunctionsHttpError rather
                     // than handing back the JSON body directly -- the
-                    // actual { status: 'error', message } payload the
+                    // actual { status: 'error', message, code } payload the
                     // function returned is on error.context, which is a
                     // Response object that still needs its body read.
                     let message = error.message || 'Could not create your account. Try again.';
+                    let code: string | undefined;
                     try {
                         const body = await error.context?.json?.();
                         if (body?.message) message = body.message;
+                        code = body?.code;
                     } catch {
                         // Fall back to error.message above if the error
                         // response body isn't valid JSON for some reason.
                     }
+
+                    // create-account tags this specific case ('account_exists')
+                    // when the email already has an auth.users row -- most
+                    // often someone re-submitting signup for an account they
+                    // (or a prior attempt) already created but never
+                    // confirmed. Rather than leaving them stuck on this
+                    // screen re-reading the error, send them to /login with
+                    // that email prefilled and its "Resend confirmation
+                    // email" action ready to tap -- the self-service path
+                    // that used to require an admin deleting the stuck
+                    // auth.users row from the Supabase dashboard.
+                    if (code === 'account_exists') {
+                        router.replace({
+                            pathname: '/login',
+                            params: { email, resend: '1' },
+                        });
+                        return;
+                    }
+
                     setFormError(message);
                     return;
                 }

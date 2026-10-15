@@ -373,7 +373,10 @@ export default function SchoolReportsScreen() {
 
                 if (membershipsError) throw membershipsError;
 
-                const memberUserIds = [...new Set((allMemberships || []).map((m) => m.user_id))];
+                // Drop orphaned memberships (null user_id) — PostgREST
+                // serializes a null inside .in() as the string "null", which
+                // fails the uuid cast and takes down the whole page.
+                const memberUserIds = [...new Set((allMemberships || []).map((m) => m.user_id).filter((id): id is string => !!id))];
                 const { data: memberProfiles, error: memberProfilesError } = memberUserIds.length
                     ? await supabase.from('profiles').select('id, display_name, username, total_miles_walked').in('id', memberUserIds)
                     : { data: [], error: null };
@@ -385,7 +388,7 @@ export default function SchoolReportsScreen() {
 
                 const breakdown: ClassBreakdownRow[] = (myClasses || []).map((c) => {
                     const classMemberIds = (allMemberships || [])
-                        .filter((m) => m.class_id === c.id)
+                        .filter((m) => m.class_id === c.id && !!m.user_id)
                         .map((m) => m.user_id);
                     const totalMiles = classMemberIds.reduce((sum, id) => sum + (milesByUserId.get(id) || 0), 0);
                     const members: StudentRow[] = classMemberIds

@@ -9,8 +9,8 @@
 // instead render one of the "special" particles below. Each entry is
 // either a plain emoji string (renders everywhere, no image hosting
 // needed) or a real custom image, written as { uri: '...' } instead of a
-// string -- e.g. a shoe or panda graphic uploaded to Supabase Storage
-// (the same badge-stickers bucket used for badge images works fine, or
+// string -- e.g. a shoe or panda graphic added to public/badges/
+// (served by Netlify alongside the badge images, or
 // any other public image URL).
 export type ConfettiSpecial = string | { uri: string };
 
@@ -23,7 +23,7 @@ export const CONFETTI_SPECIALS: ConfettiSpecial[] = [
     '⭐',
     '🍃',
     // Example of a real custom image instead of an emoji:
-    // { uri: 'https://pylcsytqrhwylhallzav.supabase.co/storage/v1/object/public/badge-stickers/confetti-panda.png' },
+    // { uri: 'https://geoquestok.org/badges/confetti-panda.png' },
 ];
 
 // Roughly what fraction of particles in a burst use a special shape/image

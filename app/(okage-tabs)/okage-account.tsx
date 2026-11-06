@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useColorScheme } from 'react-native';
 import { colors, Theme } from '../../commonStyles';
+import ProgramPartners from '../../components/ProgramPartners';
 import { signOutAndRedirect } from '../../lib/auth';
 import { confirmAlert } from '../../lib/confirmAlert';
 import { confirmDeleteAccount } from '../../lib/deleteAccount';
@@ -289,6 +290,12 @@ export default function OkageAccountScreen() {
                         <Text style={{ color: theme.subtext, fontWeight: '600', fontSize: 13, textDecorationLine: 'underline' }}>Delete Account</Text>
                     )}
                 </Pressable>
+
+                <ProgramPartners
+                    borderColor={theme.border}
+                    style={{ paddingHorizontal: 0 }}
+                    textStyle={{ fontSize: 11, lineHeight: 16, color: theme.subtext, textAlign: 'center', paddingTop: 24, paddingBottom: 16 }}
+                />
             </ScrollView>
         </View>
     );

@@ -7,3 +7,16 @@
   # during Expo's static web export (it runs in Node, not a browser, at build time).
   # Expo SDK 54's minimum is Node 20.19.4, so 22 satisfies that too.
   NODE_VERSION = "22"
+
+# Badge and trail artwork (public/badges, public/trails). Cached for a week so
+# repeat visits load from the browser instead of re-downloading. If you replace
+# an image, give it a new filename so nobody sees a stale copy.
+[[headers]]
+  for = "/badges/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+[[headers]]
+  for = "/trails/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"

@@ -34,6 +34,7 @@ import {
 // specific to just this screen's edit sheet.
 import { colors, getGlobalStyles, type Theme } from '../../commonStyles';
 import AdaptiveBlur from '../../components/AdaptiveBlur';
+import ProgramPartners from '../../components/ProgramPartners';
 import { signOutAndRedirect } from '../../lib/auth';
 import { confirmAlert, showAlert } from '../../lib/confirmAlert';
 import { confirmDeleteAccount } from '../../lib/deleteAccount';
@@ -739,12 +740,7 @@ export default function TeacherAccountScreen() {
                     </Pressable>
                 </View>
 
-                <Text style={baseStyles.acknowledgementText}>
-                    The GeoQuestOK app is a partnership between the Oklahoma State Department of Education’s
-                    Health & Physical Education Department and the Oklahoma Alliance for Geographic Education.
-                    This program works to fulfill the “Walk Across Oklahoma” foundation created by Oklahoma House
-                    Bill 1647.
-                </Text>
+                <ProgramPartners borderColor={theme.border} textStyle={baseStyles.acknowledgementText} />
             </ScrollView>
 
             {/* Customize Edit Sheet */}

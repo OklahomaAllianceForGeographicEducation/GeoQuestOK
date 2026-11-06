@@ -99,6 +99,7 @@ import { BRAND } from '../components/web/webBrand';
 // rather than being re-required on every render.
 const OKAGE_LOGO = require('../assets/images/sponsors/okage-logo.webp');
 const OSDE_LOGO = require('../assets/images/sponsors/osde-logo.png');
+const RURAL_HEALTH_LOGO = require('../assets/images/sponsors/ok-rural-health-logo.jpg');
 // A real trail photo, shown full-bleed (edge-to-edge) as the hero's
 // background image.
 const TRAIL_PHOTO = require('../assets/images/P1250144.jpg');
@@ -130,13 +131,14 @@ const FEATURES = [
     },
 ];
 
-// The two program sponsors shown as clickable logos in the "Built with
+// The program sponsors shown as clickable logos in the "Built with
 // Support from" section. Same data-driven pattern as FEATURES above —
 // `source` holds the require()'d image asset, `url` is where tapping the
 // logo should take the visitor.
 const SPONSORS = [
     { id: 'okage', name: 'Oklahoma Alliance for Geographic Education', source: OKAGE_LOGO, url: 'https://okageweb.org/' },
-    { id: 'osde', name: 'Oklahoma State Department of Education', source: OSDE_LOGO, url: 'https://oklahoma.gov/education.html' }
+    { id: 'osde', name: 'Oklahoma State Department of Education', source: OSDE_LOGO, url: 'https://oklahoma.gov/education.html' },
+    { id: 'ok-rural-health', name: 'Oklahoma Rural Health Transformation Program', source: RURAL_HEALTH_LOGO, url: 'https://oklahoma.gov/health/rhtp.html' }
 ];
 
 // The default export is the actual screen component that Expo Router
@@ -479,7 +481,7 @@ const styles = StyleSheet.create({
     // -- ABOUT: the single mission-statement paragraph on the dark band --
     aboutBody: { fontSize: 16, lineHeight: 26, color: '#EFE6DA', marginBottom: 16 },
 
-    // -- SPONSORS -- two cards that split the row evenly (flex: 1 each) so
+    // -- SPONSORS -- cards that split the row evenly (flex: 1 each) so
     // together they stretch across the same width as the green teacher
     // banner below, rather than sitting as small fixed-size boxes.
     sponsorRow: { width: '100%', flexDirection: 'column', gap: 20, marginTop: 4 },

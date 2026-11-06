@@ -5,6 +5,7 @@
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { FUNDING_STATEMENT } from '../PartnershipAcknowledgement';
 import { BRAND } from './webBrand';
 
 export default function WebFooter() {
@@ -41,6 +42,9 @@ export default function WebFooter() {
                 <Text style={styles.footerLegalDivider}>·</Text>
                 <Pressable onPress={() => router.push('/terms' as any)} style={styles.footerLinkWrap} accessibilityRole="link"><Text style={styles.footerLegalLink}>Terms and Conditions</Text></Pressable>
             </View>
+            {/* CMS grant acknowledgement -- required wording, shared with
+                the in-app disclosure via FUNDING_STATEMENT. */}
+            <Text style={styles.footerFunding}>{FUNDING_STATEMENT}</Text>
             <Text style={styles.footerCopyright}>© 2026 Oklahoma Alliance for Geographic Education. All rights reserved.</Text>
         </View>
     );
@@ -69,6 +73,16 @@ const styles = StyleSheet.create({
     footerLegalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', marginTop: -8, marginBottom: 16 },
     footerLegalLink: { color: '#B79E7C', fontSize: 12.5, fontWeight: '600', textDecorationLine: 'underline' },
     footerLegalDivider: { color: '#6A5C48', fontSize: 12.5, marginHorizontal: 2 },
+    footerFunding: {
+        fontSize: 11.5,
+        lineHeight: 18,
+        color: '#9C8C74',
+        textAlign: 'center',
+        width: '100%',
+        maxWidth: 820,
+        alignSelf: 'center',
+        marginBottom: 16,
+    },
     footerCopyright: {
         fontSize: 11.5,
         // Lightened from #8A7A63 (~4.0:1 against darkBand, just under the

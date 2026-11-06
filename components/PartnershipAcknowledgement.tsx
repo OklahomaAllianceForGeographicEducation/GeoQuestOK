@@ -23,6 +23,13 @@ type Props = {
     style?: StyleProp<TextStyle>;
 };
 
+// Required CMS grant acknowledgement for the Oklahoma Rural Health
+// Transformation Program funding. Exported so the marketing site footer
+// (components/web/WebFooter.tsx) shows the exact same wording -- this is
+// grant-mandated copy, so keep it verbatim and edit it only here.
+export const FUNDING_STATEMENT =
+    'This grant is supported by the Centers for Medicare & Medicaid Services (CMS) of the U.S. Department of Health and Human Services (HHS) as part of a financial assistance award, RHTCMS332048, totaling $223,476,948.62 with 100 percent funded by CMS/HHS. The contents are those of the author(s) and do not necessarily represent the official views of, nor an endorsement, by CMS/HHS, or the U.S. Government.';
+
 // PartnershipAcknowledgement
 // A tiny presentational component (no state, no logic) that just renders a
 // fixed block of legal/partnership disclosure copy inside a <Text>. It
@@ -30,7 +37,9 @@ type Props = {
 // style objects) into every auth screen. Not a modal and not a Context
 // provider -- just a shared snippet of static text with caller-supplied
 // styling.
-// Returns: a single <Text> element containing the disclosure paragraph.
+// Returns: a single <Text> element containing the partnership paragraph
+// followed by the CMS funding statement (nested so the caller's style
+// applies to both).
 export default function PartnershipAcknowledgement({ style }: Props) {
     return (
         <Text style={style}>
@@ -38,6 +47,8 @@ export default function PartnershipAcknowledgement({ style }: Props) {
             Health & Physical Education Department and the Oklahoma Alliance for Geographic Education.
             This program works to fulfill the “Walk Across Oklahoma” foundation created by Oklahoma House
             Bill 1647.
+            {'\n\n'}
+            {FUNDING_STATEMENT}
         </Text>
     );
 }

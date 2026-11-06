@@ -36,10 +36,10 @@ import { PRESIDENTS_UNLOCK_BADGE_ID } from '../../lib/presidentVisits';
 import { fetchTrailDetails, fetchTrailList, formatMiles, type TrailSummary as Trail } from '../../lib/trails';
 import { supabase } from '../../utils/supabase';
 
-// The public base URL for badge sticker images stored in Supabase Storage
-// (Supabase's file/blob storage service). Individual badge image
-// filenames get appended to this to build the full image URL.
-const SUPABASE_STORAGE_BASE_URL = 'https://pylcsytqrhwylhallzav.supabase.co/storage/v1/object/public/badge-stickers/';
+// The public base URL for badge sticker images, served by Netlify from
+// public/badges/ (moved off Supabase Storage to cut its egress). Individual
+// badge image filenames get appended to this to build the full image URL.
+const BADGE_IMAGE_BASE_URL = 'https://geoquestok.org/badges/';
 
 // One entry in the badge/stamp catalog, merged with this student's
 // unlock status.
@@ -471,7 +471,7 @@ export default function WornLeatherFieldJournal() {
                                 <View style={styles.inkUnderlineDivider} />
                                 <View style={styles.stampMatrixGrid}>
                                     {badges.map((badge) => {
-                                        const imageUrl = `${SUPABASE_STORAGE_BASE_URL}${badge.image_filename}`;
+                                        const imageUrl = `${BADGE_IMAGE_BASE_URL}${badge.image_filename}`;
                                         return (
                                         <Pressable
                                                 key={badge.id}
@@ -675,7 +675,7 @@ export default function WornLeatherFieldJournal() {
                                     !selectedBadge.unlocked && styles.badgeImageWrapperLocked
                                 ]}>
                                     <Image
-                                        source={{ uri: `${SUPABASE_STORAGE_BASE_URL}${selectedBadge.image_filename}` }}
+                                        source={{ uri: `${BADGE_IMAGE_BASE_URL}${selectedBadge.image_filename}` }}
                                         style={styles.largeStampPNGSticker}
                                         contentFit="contain"
                                     />

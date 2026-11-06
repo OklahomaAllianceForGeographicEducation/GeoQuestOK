@@ -73,10 +73,11 @@ type BadgeUnlockContextValue = {
     refreshBadgeInbox: () => Promise<void>;
 };
 
-// Base URL for the public Supabase Storage bucket holding badge artwork.
-// Each badge's `image_filename` is appended to this to build the full
-// image URL.
-const SUPABASE_STORAGE_BASE_URL = 'https://pylcsytqrhwylhallzav.supabase.co/storage/v1/object/public/badge-stickers/';
+// Base URL for badge artwork, served by Netlify from public/badges/ (moved
+// off Supabase Storage to cut its egress). Each badge's `image_filename`
+// is appended to this to build the full image URL. Absolute so the native
+// apps can load it too.
+const BADGE_IMAGE_BASE_URL = 'https://geoquestok.org/badges/';
 
 // createContext(defaultValue) creates the Context object itself. The
 // defaultValue here (a no-op async function) is only ever used if a
@@ -143,7 +144,7 @@ function BadgePopup({ badge, onClose }: { badge: BadgeUnlockItem; onClose: () =>
                     <Text style={styles.kicker}>BADGE UNLOCKED</Text>
                     <View style={styles.imageFrame}>
                         <Image
-                            source={{ uri: `${SUPABASE_STORAGE_BASE_URL}${badge.image_filename}` }}
+                            source={{ uri: `${BADGE_IMAGE_BASE_URL}${badge.image_filename}` }}
                             style={styles.image}
                             contentFit="contain"
                         />

@@ -26,6 +26,7 @@ import React, { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, useColorScheme, View } from 'react-native';
 import { colors, getGlobalStyles, Theme } from '../../commonStyles';
 import { confirmAlert } from '../../lib/confirmAlert';
+import ProgramPartners from '../../components/ProgramPartners';
 import { signOutAndRedirect } from '../../lib/auth';
 import { confirmDeleteAccount } from '../../lib/deleteAccount';
 import { requestTourReplay } from '../../lib/onboarding';
@@ -366,15 +367,8 @@ export default function SiteAdminAccount() {
                     </Pressable>
                 </View>
 
-                {/* Standard footer acknowledgement text shared across the
-                    app's account screens, crediting the state department
-                    partnership behind GeoQuestOK. */}
-                <Text style={baseStyles.acknowledgementText}>
-                    The GeoQuestOK app is a partnership between the Oklahoma State Department of Education’s
-                    Health & Physical Education Department and the Oklahoma Alliance for Geographic Education.
-                    This program works to fulfill the “Walk Across Oklahoma” foundation created by Oklahoma House
-                    Bill 1647.
-                </Text>
+                {/* Partner logos + partnership/CMS funding disclosure. */}
+                <ProgramPartners borderColor={theme.border} textStyle={baseStyles.acknowledgementText} />
             </ScrollView>
         </View>
     );

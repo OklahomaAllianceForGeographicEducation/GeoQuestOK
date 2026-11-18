@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "GeoQuest OK",
-    "slug": "expo-test-dev",
+    "name": "GeoQuestOK",
+    "slug": "geoquestok",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/GeoQuestOK ios Logo.png",
@@ -9,6 +9,7 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "bundleIdentifier": "org.geoquestok.app",
       "supportsTablet": true,
       "splash": {
         "image": "./assets/images/GeoQuestOK ios Logo.png",
@@ -16,6 +17,7 @@
       }
     },
     "android": {
+      "package": "org.geoquestok.app",
       "adaptiveIcon": {
         "backgroundColor": "#1f5d50",
         "foregroundImage": "./assets/images/android.adaptiveIcon.foregroundImage.png",

@@ -8,30 +8,30 @@ import React, { useEffect, useRef, useState } from 'react';
 // on-screen keyboard opens, so the keyboard doesn't cover the input
 // fields/button. Platform lets us branch logic based on which OS the app
 // is running on (iOS, Android, or web).
-import { Alert, TextInput, Text, Pressable, StyleSheet, KeyboardAvoidingView, Platform, useColorScheme } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, useColorScheme } from 'react-native';
 
 import { supabase } from '../utils/supabase';
 
 // Link is used here for the "Sign Up" navigation link at the bottom.
-import { useRouter, useLocalSearchParams, Link } from 'expo-router';
+import { Link, useLocalSearchParams, useRouter } from 'expo-router';
 
 // Builds the deep link a password-reset email should send the user back
 // to. createURL() resolves to the right thing on both platforms:
-// "expotestdev://reset-password" on native, the dev/prod web origin here.
+// "geoquestok://reset-password" on native, the dev/prod web origin here.
 import * as Linking from 'expo-linking';
 
-import Button from '../components/Button';
-import WebContainer from '../components/WebContainer';
-import PartnershipAcknowledgement from '../components/PartnershipAcknowledgement';
 import { colors, Theme } from '../commonStyles';
+import Button from '../components/Button';
+import PartnershipAcknowledgement from '../components/PartnershipAcknowledgement';
+import WebContainer from '../components/WebContainer';
 import { Sentry } from '../lib/sentry';
 
 // A helper (defined in lib/profiles.ts) that makes sure a "profiles"
 // table row exists for a given user — creating one if it's missing. Used
 // right after login in case a user's profile row somehow never got
 // created (e.g. an interrupted signup).
-import { ensureProfileRow } from '../lib/profiles';
 import { resolveAppShellPath } from '../lib/access';
+import { ensureProfileRow } from '../lib/profiles';
 
 // How long to wait for a Supabase auth request before giving up and
 // showing a "this is taking a while" message instead of leaving the

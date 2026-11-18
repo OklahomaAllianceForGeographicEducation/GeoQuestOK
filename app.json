@@ -56,6 +56,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7091432c-5afc-4d21-819c-f1cf2a71f5b9"
+      }
+    },
+    "owner": "geoquestok"
   }
 }

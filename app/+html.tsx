@@ -21,6 +21,18 @@ export default function Root({ children }: { children: React.ReactNode }) {
         <meta property="og:title" content="GeoQuestOK" />
         <meta property="og:description" content="Walk real Oklahoma trails, unlock landmarks, and learn state history and geography along the way." />
         <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://geoquestok.org/" />
+
+        {/* Link preview image (texts, email, social). Lives in public/, so
+                    it's served at the site root; og:image must be an absolute URL. */}
+        <meta property="og:image" content="https://geoquestok.org/og-image.png" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
+        <meta name="twitter:card" content="summary_large_image" />
+
+        {/* Home-screen icon when someone uses Share -> Add to Home Screen
+                    on an iPad or iPhone (public/apple-touch-icon.png). */}
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 
         {/* Disables the browser's default hover-based responsive
                     layout for the root <ScrollView>, matching how the app

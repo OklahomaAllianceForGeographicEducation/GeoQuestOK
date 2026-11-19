@@ -4,46 +4,45 @@
     "slug": "geoquestok",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/GeoQuestOK ios Logo.png",
-    "scheme": "expotestdev",
+    "icon": "./assets/images/GeoQuestOK_ios_logo.png",
+    "scheme": "geoquestok",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "org.geoquestok.app",
       "supportsTablet": true,
-      "splash": {
-        "image": "./assets/images/GeoQuestOK ios Logo.png",
-        "resizeMode": "cover"
+      "config": {
+        "usesNonExemptEncryption": false
       }
     },
     "android": {
       "package": "org.geoquestok.app",
       "adaptiveIcon": {
-        "backgroundColor": "#1f5d50",
-        "foregroundImage": "./assets/images/android.adaptiveIcon.foregroundImage.png",
-        "backgroundImage": "./assets/images/android.adaptiveIcon.backgroundColor.png",
-        "monochromeImage": "./assets/images/android.adaptiveIcon.monochromeImage.png"
-      },
-      "splash": {
-        "ldpi": "./assets/images/splashScreens/Android LDPI Splash Screen.png",
-        "mdpi": "./assets/images/splashScreens/Android MDPI Splash Screen.png",
-        "hdpi": "./assets/images/splashScreens/Android HDPI Splash Screen.png",
-        "xhdpi": "./assets/images/splashScreens/Android XHDPI Splash Screen.png",
-        "xxhdpi": "./assets/images/splashScreens/Android XXHDPI Splash Screen.png",
-        "xxxhdpi": "./assets/images/splashScreens/Android XXXHDPI Splash Screen.png",
-        "resizeMode": "cover"
+        "backgroundColor": "#f6efe7",
+        "foregroundImage": "./assets/images/GeoQuestOK_android_foreground_safe.png",
+        "backgroundImage": "./assets/images/GeoQuestOK_android_background.png",
+        "monochromeImage": "./assets/images/GeoQuestOK_android_monochrome_safe.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/web.favicon.png"
+      "favicon": "./assets/images/Favicon.png"
     },
     "plugins": [
       "expo-router",
       "expo-font",
       "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/GeoQuestOK_android_foreground_safe.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#f6efe7"
+        }
+      ],
       [
         "@sentry/react-native/expo",
         {
